@@ -1039,7 +1039,7 @@ createSlider(playerTab, "Walk Speed", 16, 100, 16, function(val)
     end
 end)
 
-createSlider(playerTab, "Jump Power", 50, 150, 50, function(val)
+createSlider(playerTab, "Jump Power", 20, 150, 50, function(val)
     jumpPower = val
     local char = player.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
