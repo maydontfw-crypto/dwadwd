@@ -1028,7 +1028,7 @@ end)
 -- Populate Player Tab
 
 local walkSpeed = 16
-local jumpPower = 50
+local jumpPower = 20
 
 createSlider(playerTab, "Walk Speed", 16, 100, 16, function(val)
     walkSpeed = val
