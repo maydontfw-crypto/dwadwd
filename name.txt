@@ -56,7 +56,7 @@ local function ShowKeyError()
     msg.Size = UDim2.new(1, -30, 0, 120)
     msg.Position = UDim2.new(0, 15, 0, 52)
     msg.BackgroundTransparency = 1
-    msg.Text = 'Set _G.script_key = "<key>" BEFORE running this script.\n\nValid keys:\n  ' .. GetValidKeyList() .. '\n\nYou entered: ' .. tostring(userEnteredKey)
+    msg.Text = 'Set _G.script_key = "<key>" BEFORE running this script.\n\nYou entered: ' .. tostring(userEnteredKey)
     msg.TextColor3 = Color3.fromRGB(220, 220, 230)
     msg.Font = Enum.Font.Gotham
     msg.TextSize = 14
