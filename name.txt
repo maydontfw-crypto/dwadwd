@@ -19,6 +19,75 @@ local function GetValidKeyList()
     return table.concat(keys, ", ")
 end
 
+-- // Show the error on screen instead of only the console
+local function ShowKeyError()
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "PancakeKeyError"
+    sg.ResetOnSpawn = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    sg.Parent = cloneref(game:GetService("CoreGui") or gethui())
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 430, 0, 200)
+    frame.Position = UDim2.new(0.5, -215, 0.5, -100)
+    frame.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
+    frame.BorderSizePixel = 0
+    frame.Parent = sg
+    local frameCorner = Instance.new("UICorner")
+    frameCorner.CornerRadius = UDim.new(0, 10)
+    frameCorner.Parent = frame
+    local frameStroke = Instance.new("UIStroke")
+    frameStroke.Color = Color3.fromRGB(120, 40, 40)
+    frameStroke.Thickness = 2
+    frameStroke.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -50, 0, 40)
+    title.Position = UDim2.new(0, 15, 0, 10)
+    title.BackgroundTransparency = 1
+    title.Text = "INVALID KEY"
+    title.TextColor3 = Color3.fromRGB(255, 90, 90)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 20
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = frame
+
+    local msg = Instance.new("TextLabel")
+    msg.Size = UDim2.new(1, -30, 0, 120)
+    msg.Position = UDim2.new(0, 15, 0, 52)
+    msg.BackgroundTransparency = 1
+    msg.Text = 'Set _G.script_key = "<key>" BEFORE running this script.\n\nValid keys:\n  ' .. GetValidKeyList() .. '\n\nYou entered: ' .. tostring(userEnteredKey)
+    msg.TextColor3 = Color3.fromRGB(220, 220, 230)
+    msg.Font = Enum.Font.Gotham
+    msg.TextSize = 14
+    msg.TextXAlignment = Enum.TextXAlignment.Left
+    msg.TextYAlignment = Enum.TextYAlignment.Top
+    msg.TextWrapped = true
+    msg.Parent = frame
+
+    local close = Instance.new("TextButton")
+    close.Size = UDim2.new(0, 30, 0, 30)
+    close.Position = UDim2.new(1, -36, 0, 6)
+    close.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    close.Text = "X"
+    close.TextColor3 = Color3.fromRGB(255, 255, 255)
+    close.Font = Enum.Font.GothamBold
+    close.TextSize = 16
+    close.Parent = frame
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 8)
+    closeCorner.Parent = close
+    close.MouseButton1Click:Connect(function()
+        sg:Destroy()
+    end)
+
+    task.delay(15, function()
+        if sg and sg.Parent then
+            sg:Destroy()
+        end
+    end)
+end
+
 if VALID_KEYS[userEnteredKey] then
     print("[SUCCESS]: Key validated. Running protected payload...")
 
@@ -887,4 +956,5 @@ else
     print("  Set _G.script_key = \"<key>\" BEFORE running this script.")
     print("  Valid keys: " .. GetValidKeyList())
     print('  You entered: "' .. tostring(userEnteredKey) .. '"')
+    ShowKeyError()
 end
