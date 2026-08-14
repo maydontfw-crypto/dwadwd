@@ -1,8 +1,8 @@
--- ========================================================== --
+-- ==========================================================
 -- OBFUSCATED CLOUD LOADER ENGINE
--- ========================================================== --
+-- ==========================================================
 local player = game:GetService("Players").LocalPlayer
-local userEnteredKey = _G.script_key or ""
+local userEnteredKey = tostring(_G.script_key or ""):gsub("%s", "")
 
 -- Allowed Key List
 local VALID_KEYS = {
@@ -11,12 +11,20 @@ local VALID_KEYS = {
     ["XENO-ADMIN-VOID"]    = true,
 }
 
+local function GetValidKeyList()
+    local keys = {}
+    for key in pairs(VALID_KEYS) do
+        table.insert(keys, key)
+    end
+    return table.concat(keys, ", ")
+end
+
 if VALID_KEYS[userEnteredKey] then
     print("[SUCCESS]: Key validated. Running protected payload...")
-    
-    -- ========================================================== --
-    -- PASTE YOUR SCRAMBLED/ENCRYPTED MOONSEC CODE DIRECTLY BELOW:
-    -- ========================================================== --
+
+    -- ==========================================================
+    -- PROTECTED PAYLOAD (Paste your scrambled/encrypted code below)
+    -- ==========================================================
 --[[
   Pancake Hub
   --------------------------------------------------------------------
@@ -871,3 +879,12 @@ if (isfile(AUTOLOAD_FILE)) then
 end
 
 Window:SelectTab(1)
+    -- ==========================================================
+    -- END OF PROTECTED PAYLOAD
+    -- ==========================================================
+else
+    print("[ERROR]: Invalid or missing script key.")
+    print("  Set _G.script_key = \"<key>\" BEFORE running this script.")
+    print("  Valid keys: " .. GetValidKeyList())
+    print('  You entered: "' .. tostring(userEnteredKey) .. '"')
+end
