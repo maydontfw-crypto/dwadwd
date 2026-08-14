@@ -17,767 +17,528 @@ if VALID_KEYS[userEnteredKey] then
     -- ========================================================== --
     -- PASTE YOUR SCRAMBLED/ENCRYPTED MOONSEC CODE DIRECTLY BELOW:
     -- ========================================================== --
-    local encrypted_code = [====[
+--[[
+  Pancake Hub
+  --------------------------------------------------------------------
+  A legit (camera-based) aimbot for Block Spin.
+
+  Instead of silent-aiming (hooking raycasts) this one moves your
+  CAMERA toward the target while you hold the aim key, with smoothing,
+  a FOV limit and hitbox selection. It looks like a real player
+  turning, so it never touches HumanoidRootPart.CFrame and cannot be
+  flagged as a TP.
+
+  Requirements:
+    - Executor with Drawing support (Xeno).
+    - Internet access (loads LinoriaLib for the UI).
+
+  Usage:
+    1. Load the script in Xeno.
+    2. "Enabled" is on by default; the aim key is right mouse (hold).
+    3. Hold the key near a target to lock onto them.
+    4. Press Right Shift (or use the "Show UI" toggle in UI Settings)
+       to open/close the menu. No custom cursor is drawn.
+]]
+
+-- // Dependencies (LinoriaLib UI)
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/LinoriaLib/main/Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/LinoriaLib/main/addons/ThemeManager.lua"))()
+
+-- // Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TeleportService = game:GetService("TeleportService")
-local player = Players.LocalPlayer
-local camera = workspace.CurrentCamera
-local playerGui = player:WaitForChild("PlayerGui")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera or Workspace:FindFirstChildOfClass("Camera")
 
--- 1. Create the main container ScreenGui
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "CustomDashboardGui"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = playerGui
+-- // Window
+local Window = Library:CreateWindow({
+    Title = "Pancake Hub",
+    Center = true,
+    AutoShow = false,
+    TabPadding = 8,
+    MenuFadeTime = 0.2,
+})
 
--- Theme and Customization State Variables (Darker default shades, matching buttons & panels)
-local currentAccentColor = Color3.fromRGB(99, 102, 241) -- Default Indigo
-local currentBgColor = Color3.fromRGB(10, 10, 12)       -- Much darker default panel background
-local currentButtonColor = Color3.fromRGB(18, 18, 22)   -- Slightly elevated darker shade for interactive buttons/elements
-local themeElements = {} -- Stores elements that need theme updates
-local mainTransparency = 0 -- 0 (Opaque) to 0.5 (Translucent)
-local uiToggleKey = Enum.KeyCode.RightShift
-local uiVisible = true
+local Tabs = {
+    Aiming = Window:AddTab("Aiming"),
+    ESP = Window:AddTab("ESP"),
+    ["UI Settings"] = Window:AddTab("UI Settings"),
+}
 
--- 2. Create the main background frame (The panel) - Size: 720x420
-local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 720, 0, 420)
-mainFrame.Position = UDim2.new(0.5, -360, 0.5, -210)
-mainFrame.BackgroundColor3 = currentBgColor
-mainFrame.BackgroundTransparency = mainTransparency
-mainFrame.BorderSizePixel = 0
-mainFrame.Parent = screenGui
-table.insert(themeElements, {Type = "Background", Instance = mainFrame})
+-- // Override the menu toggle so it does NOT draw LinoriaLib's
+-- // triangle cursor (we use the game's own cursor instead)
+function Library.Toggle()
+    Window.Holder.Visible = not Window.Holder.Visible
+end
+Window.Holder.Visible = true
 
--- Add rounded corners to the main frame
-local uiCorner = Instance.new("UICorner")
-uiCorner.CornerRadius = UDim.new(0, 8)
-uiCorner.Parent = mainFrame
+-- // Aiming options (captured as locals - the global Options table is
+-- // unreliable on some executors)
+local AimingGroup = Tabs.Aiming:AddLeftGroupbox("Aimbot")
 
--- ==========================================
--- DRAGGABLE UI IMPLEMENTATION
--- ==========================================
-local dragging = false
-local dragInput, dragStart, startPos
+local EnabledToggle = AimingGroup:AddToggle("Enabled", {
+    Text = "Enabled",
+    Default = true,
+    Tooltip = "Master toggle for the aimbot",
+})
+EnabledToggle:AddKeyPicker("EnabledKey", {
+    Text = "Aim Key",
+    Default = Enum.UserInputType.MouseButton2,
+    SyncToggleState = false,
+    Mode = "Hold",
+    Modes = {"Hold", "Toggle"},
+    IgnoreProcessedCheck = true,
+})
+local EnabledKey = EnabledToggle.Addons[1]
 
-mainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = mainFrame.Position
-        
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
+local FOVSlider = AimingGroup:AddSlider("FOV", {
+    Text = "FOV",
+    Default = 90,
+    Min = 5,
+    Max = 200,
+    Suffix = "px",
+    Rounding = 1,
+    Tooltip = "Only targets inside this distance from the crosshair get locked",
+})
+
+local HitboxDropdown = AimingGroup:AddDropdown("Hitbox", {
+    Text = "Hitbox",
+    Values = {"Head", "HumanoidRootPart", "Torso"},
+    Default = 1,
+    Multi = false,
+    Tooltip = "Which body part to aim at",
+})
+-- // LinoriaLib keeps the dropdown list open after picking, and the open
+-- // list blocks every slider below it. Close it after every selection.
+HitboxDropdown:OnChanged(function()
+    HitboxDropdown:CloseDropdown()
+end)
+
+local SmoothnessSlider = AimingGroup:AddSlider("Smoothness", {
+    Text = "Smoothness",
+    Default = 60,
+    Min = 0,
+    Max = 100,
+    Suffix = "%",
+    Rounding = 1,
+    Tooltip = "Higher = faster lock-on. 100% = instant snap",
+})
+
+local MaxDistanceSlider = AimingGroup:AddSlider("MaxDistance", {
+    Text = "Max Distance",
+    Default = 200,
+    Min = 5,
+    Max = 500,
+    Suffix = " studs",
+    Rounding = 1,
+    Tooltip = "Maximum range to look for targets",
+})
+
+local PredictionSlider = AimingGroup:AddSlider("Prediction", {
+    Text = "Prediction",
+    Default = 0,
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Tooltip = "Leads moving targets (0 = none)",
+})
+
+-- // Extras
+local ExtrasGroup = Tabs.Aiming:AddRightGroupbox("Extras")
+
+local TeamCheckToggle = ExtrasGroup:AddToggle("TeamCheck", {
+    Text = "Ignore Teammates",
+    Default = true,
+    Tooltip = "Do not aim at players on your team",
+})
+
+-- // Helpers
+local function GetCharacter(Player)
+    return Player.Character
+end
+
+local function IsAlive(Character)
+    if (not Character) then
+        return false
+    end
+
+    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+    local RootPart = Character:FindFirstChild("HumanoidRootPart")
+    return Humanoid and RootPart and Humanoid.Health > 0
+end
+
+-- // Find the best target and return the aim point (or nil)
+local function GetTargetPoint()
+    local ViewportCenter = Camera.ViewportSize / 2
+    local BestPart = nil
+    local BestDistance = math.huge
+
+    for _, Player in ipairs(Players:GetPlayers()) do
+        if (Player == LocalPlayer) then
+            continue
+        end
+
+        if (TeamCheckToggle.Value and LocalPlayer.Team and Player.Team and Player.Team == LocalPlayer.Team) then
+            continue
+        end
+
+        local Character = GetCharacter(Player)
+        if (not IsAlive(Character)) then
+            continue
+        end
+
+        local RootPart = Character:FindFirstChild("HumanoidRootPart")
+        if (not RootPart) then
+            continue
+        end
+
+        local Range = (RootPart.Position - Camera.CFrame.Position).Magnitude
+        if (Range > MaxDistanceSlider.Value) then
+            continue
+        end
+
+        local Part = Character:FindFirstChild(HitboxDropdown.Value) or RootPart
+        local ScreenPos, OnScreen = Camera:WorldToScreenPoint(Part.Position)
+        if (not OnScreen) then
+            continue
+        end
+
+        local ScreenDistance = (Vector2.new(ScreenPos.X, ScreenPos.Y) - ViewportCenter).Magnitude
+        if (ScreenDistance > FOVSlider.Value) then
+            continue
+        end
+
+        if (ScreenDistance < BestDistance) then
+            BestDistance = ScreenDistance
+            BestPart = Part
+        end
+    end
+
+    if (not BestPart) then
+        return nil
+    end
+
+    local Point = BestPart.Position
+
+    -- // Simple prediction
+    if (PredictionSlider.Value > 0) then
+        local Velocity = BestPart.AssemblyLinearVelocity or Vector3.new()
+        local TravelTime = (Point - Camera.CFrame.Position).Magnitude / 1000
+        Point = Point + Velocity * TravelTime * PredictionSlider.Value
+    end
+
+    return Point
+end
+
+-- // Main loop - runs after the game's own camera so we win the override
+RunService:UnbindFromRenderStep("BlockSpinLegitAim")
+RunService:BindToRenderStep("BlockSpinLegitAim", Enum.RenderPriority.Camera.Value + 1, function()
+    local Active = EnabledToggle.Value and EnabledKey:GetState()
+    if (not Active) then
+        return
+    end
+
+    local Target = GetTargetPoint()
+    if (not Target) then
+        return
+    end
+
+    -- // Aim: rotate the camera onto the target
+    local Desired = CFrame.lookAt(Camera.CFrame.Position, Target)
+    local Smooth = SmoothnessSlider.Value / 100
+    if (Smooth >= 1) then
+        Camera.CFrame = Desired
+    else
+        Camera.CFrame = Camera.CFrame:Lerp(Desired, Smooth)
+    end
+end)
+
+-- // ESP
+local ESPTab = Tabs.ESP
+local ESPGroup = ESPTab:AddLeftGroupbox("ESP")
+
+local ESPToggle = ESPGroup:AddToggle("ESPEnabled", {
+    Text = "Enabled",
+    Default = true,
+    Tooltip = "Master toggle for the ESP",
+})
+
+local ESPBoxesToggle = ESPGroup:AddToggle("ESPBoxes", {
+    Text = "Boxes",
+    Default = true,
+    Tooltip = "Draw a box around each player",
+})
+
+local ESPNameToggle = ESPGroup:AddToggle("ESPName", {
+    Text = "Names",
+    Default = true,
+    Tooltip = "Draw player names above the box",
+})
+
+local ESPHealthToggle = ESPGroup:AddToggle("ESPHealth", {
+    Text = "Health",
+    Default = true,
+    Tooltip = "Show health numbers under the box",
+})
+
+local ESPTeamCheckToggle = ESPGroup:AddToggle("ESPTeamCheck", {
+    Text = "Ignore Teammates",
+    Default = true,
+    Tooltip = "Do not show players on your team",
+})
+
+local ESPDistanceSlider = ESPGroup:AddSlider("ESPDistance", {
+    Text = "Max Distance",
+    Default = 200,
+    Min = 5,
+    Max = 500,
+    Suffix = " studs",
+    Rounding = 1,
+    Tooltip = "Maximum range to draw ESP for",
+})
+
+local ESPCache = {}
+
+local function EnsureESP(Player)
+    local Entry = ESPCache[Player]
+    if (not Entry) then
+        Entry = {
+            Box = Drawing.new("Square"),
+            Name = Drawing.new("Text"),
+            Health = Drawing.new("Text"),
+        }
+
+        Entry.Box.Thickness = 1
+        Entry.Box.Transparency = 1
+        Entry.Box.Color = Color3.fromRGB(255, 60, 60)
+
+        Entry.Name.Center = true
+        Entry.Name.Outline = true
+        Entry.Name.OutlineColor = Color3.new(0, 0, 0)
+        Entry.Name.Size = 13
+
+        Entry.Health.Center = true
+        Entry.Health.Outline = true
+        Entry.Health.OutlineColor = Color3.new(0, 0, 0)
+        Entry.Health.Size = 12
+
+        ESPCache[Player] = Entry
+    end
+    return Entry
+end
+
+Players.PlayerRemoving:Connect(function(Player)
+    local Entry = ESPCache[Player]
+    if (Entry) then
+        Entry.Box:Remove()
+        Entry.Name:Remove()
+        Entry.Health:Remove()
+        ESPCache[Player] = nil
+    end
+end)
+
+RunService:BindToRenderStep("BlockSpinESP", Enum.RenderPriority.Character.Value, function()
+    local Enabled = ESPToggle.Value
+    local MaxDist = ESPDistanceSlider.Value
+
+    for _, Player in ipairs(Players:GetPlayers()) do
+        if (Player == LocalPlayer) then
+            local SelfEntry = ESPCache[Player]
+            if (SelfEntry) then
+                SelfEntry.Box.Visible = false
+                SelfEntry.Name.Visible = false
+                SelfEntry.Health.Visible = false
             end
-        end)
-    end
-end)
-
-mainFrame.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(
-            startPos.X.Scale, 
-            startPos.X.Offset + delta.X, 
-            startPos.Y.Scale, 
-            startPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
--- 3. Create Sidebar for Navigation
-local sidebar = Instance.new("Frame")
-sidebar.Name = "Sidebar"
-sidebar.Size = UDim2.new(0, 150, 1, -24)
-sidebar.Position = UDim2.new(0, 12, 0, 12)
-sidebar.BackgroundColor3 = currentBgColor
-sidebar.BackgroundTransparency = mainTransparency
-sidebar.BorderSizePixel = 0
-sidebar.Parent = mainFrame
-table.insert(themeElements, {Type = "Background", Instance = sidebar})
-
-local sidebarCorner = Instance.new("UICorner")
-sidebarCorner.CornerRadius = UDim.new(0, 6)
-sidebarCorner.Parent = sidebar
-
-local uiListLayout = Instance.new("UIListLayout")
-uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-uiListLayout.Padding = UDim.new(0, 6)
-uiListLayout.Parent = sidebar
-
-local uiPadding = Instance.new("UIPadding")
-uiPadding.PaddingTop = UDim.new(0, 10)
-uiPadding.PaddingBottom = UDim.new(0, 10)
-uiPadding.PaddingLeft = UDim.new(0, 10)
-uiPadding.PaddingRight = UDim.new(0, 10)
-uiPadding.Parent = sidebar
-
--- 4. Create Content Area Cards (Dual-card layout)
-local contentGrid = Instance.new("Frame")
-contentGrid.Name = "ContentGrid"
-contentGrid.Size = UDim2.new(1, -182, 1, -75)
-contentGrid.Position = UDim2.new(0, 170, 0, 65)
-contentGrid.BackgroundTransparency = 1
-contentGrid.Parent = mainFrame
-
-local leftCard = Instance.new("Frame")
-leftCard.Name = "LeftCard"
-leftCard.Size = UDim2.new(0.65, -6, 1, -12)
-leftCard.Position = UDim2.new(0, 0, 0, 0)
-leftCard.BackgroundColor3 = currentBgColor
-leftCard.BackgroundTransparency = mainTransparency
-leftCard.BorderSizePixel = 0
-leftCard.Parent = contentGrid
-table.insert(themeElements, {Type = "Background", Instance = leftCard})
-
-local leftCardCorner = Instance.new("UICorner")
-leftCardCorner.CornerRadius = UDim.new(0, 6)
-leftCardCorner.Parent = leftCard
-
-local rightCard = Instance.new("Frame")
-rightCard.Name = "RightCard"
-rightCard.Size = UDim2.new(0.35, -6, 1, -12)
-rightCard.Position = UDim2.new(0.65, 6, 0, 0)
-rightCard.BackgroundColor3 = currentBgColor
-rightCard.BackgroundTransparency = mainTransparency
-rightCard.BorderSizePixel = 0
-rightCard.Parent = contentGrid
-table.insert(themeElements, {Type = "Background", Instance = rightCard})
-
-local rightCardCorner = Instance.new("UICorner")
-rightCardCorner.CornerRadius = UDim.new(0, 6)
-rightCardCorner.Parent = rightCard
-
--- Containers to hold content for each tab dynamically on the LeftCard
-local tabContents = {}
-
-local function createTabContentContainer(tabName)
-    local container = Instance.new("ScrollingFrame")
-    container.Name = tabName .. "Content"
-    container.Size = UDim2.new(1, 0, 1, 0)
-    container.BackgroundTransparency = 1
-    container.BorderSizePixel = 0
-    container.ScrollBarThickness = 4
-    container.CanvasSize = UDim2.new(0, 0, 0, 0)
-    container.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    container.Visible = false
-    container.Parent = leftCard
-
-    local listLayout = Instance.new("UIListLayout")
-    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    listLayout.Padding = UDim.new(0, 8)
-    listLayout.Parent = container
-
-    local padding = Instance.new("UIPadding")
-    padding.PaddingTop = UDim.new(0, 10)
-    padding.PaddingBottom = UDim.new(0, 10)
-    padding.PaddingLeft = UDim.new(0, 10)
-    padding.PaddingRight = UDim.new(0, 10)
-    padding.Parent = container
-
-    tabContents[tabName] = container
-    return container
-end
-
--- Helper function for standard toggles
-local function createToggle(parent, titleText, callback)
-    local toggleContainer = Instance.new("Frame")
-    toggleContainer.Size = UDim2.new(1, 0, 0, 36)
-    toggleContainer.BackgroundTransparency = 1
-    toggleContainer.Parent = parent
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -50, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = titleText
-    label.TextColor3 = Color3.fromRGB(228, 228, 231)
-    label.TextSize = 14
-    label.Font = Enum.Font.SourceSansSemibold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = toggleContainer
-
-    local toggleButton = Instance.new("TextButton")
-    toggleButton.Size = UDim2.new(0, 40, 0, 20)
-    toggleButton.Position = UDim2.new(1, -40, 0.5, -10)
-    toggleButton.BackgroundColor3 = currentButtonColor
-    toggleButton.Text = ""
-    toggleButton.Parent = toggleContainer
-    table.insert(themeElements, {Type = "ButtonBg", Instance = toggleButton})
-
-    local tCorner = Instance.new("UICorner")
-    tCorner.CornerRadius = UDim.new(1, 0)
-    tCorner.Parent = toggleButton
-
-    local indicator = Instance.new("Frame")
-    indicator.Size = UDim2.new(0, 16, 0, 16)
-    indicator.Position = UDim2.new(0, 2, 0.5, -8)
-    indicator.BackgroundColor3 = Color3.fromRGB(161, 161, 170)
-    indicator.Parent = toggleButton
-
-    local iCorner = Instance.new("UICorner")
-    iCorner.CornerRadius = UDim.new(1, 0)
-    iCorner.Parent = indicator
-
-    local active = false
-    toggleButton.MouseButton1Click:Connect(function()
-        active = not active
-        if active then
-            indicator:TweenPosition(UDim2.new(1, -18, 0.5, -8), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.15, true)
-            indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            toggleButton.BackgroundColor3 = currentAccentColor
-        else
-            indicator:TweenPosition(UDim2.new(0, 2, 0.5, -8), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.15, true)
-            indicator.BackgroundColor3 = Color3.fromRGB(161, 161, 170)
-            toggleButton.BackgroundColor3 = currentButtonColor
+            continue
         end
-        
-        if callback then
-            callback(active)
-        end
-    end)
-end
 
--- Helper function for standard sliders
-local function createSlider(parent, titleText, minVal, maxVal, defaultVal, callback)
-    local sliderContainer = Instance.new("Frame")
-    sliderContainer.Size = UDim2.new(1, 0, 0, 50)
-    sliderContainer.BackgroundTransparency = 1
-    sliderContainer.Parent = parent
+        local Entry = EnsureESP(Player)
+        local Character = Player.Character
+        local RootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+        local Head = Character and Character:FindFirstChild("Head")
+        local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+        local Show = false
 
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 0, 20)
-    label.BackgroundTransparency = 1
-    label.Text = titleText .. ": " .. tostring(defaultVal)
-    label.TextColor3 = Color3.fromRGB(228, 228, 231)
-    label.TextSize = 14
-    label.Font = Enum.Font.SourceSansSemibold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = sliderContainer
+        if (Enabled and RootPart and Head and Humanoid and Humanoid.Health > 0) then
+            local IsTeammate = LocalPlayer.Team and Player.Team and Player.Team == LocalPlayer.Team
+            if (not (ESPTeamCheckToggle.Value and IsTeammate)) then
+                local Range = (RootPart.Position - Camera.CFrame.Position).Magnitude
+                if (Range <= MaxDist) then
+                    local ScreenHead, OnHead = Camera:WorldToScreenPoint(Head.Position)
+                    if (OnHead) then
+                        local HeadTop = Head.Position + Head.CFrame.UpVector * (Head.Size.Y / 2)
+                        local Feet = RootPart.Position - RootPart.CFrame.UpVector * (RootPart.Size.Y / 2)
+                        local ScreenTop, OnTop = Camera:WorldToScreenPoint(HeadTop)
+                        local ScreenFeet, OnFeet = Camera:WorldToScreenPoint(Feet)
 
-    local sliderBg = Instance.new("Frame")
-    sliderBg.Size = UDim2.new(1, 0, 0, 6)
-    sliderBg.Position = UDim2.new(0, 0, 0, 30)
-    sliderBg.BackgroundColor3 = currentButtonColor
-    sliderBg.BorderSizePixel = 0
-    sliderBg.Parent = sliderContainer
-    table.insert(themeElements, {Type = "ButtonBg", Instance = sliderBg})
+                        if (OnTop and OnFeet) then
+                            local Height = math.abs(ScreenFeet.Y - ScreenTop.Y)
+                            local Width = Height * 0.6
+                            local TopY = math.min(ScreenTop.Y, ScreenFeet.Y)
+                            local BottomY = math.max(ScreenTop.Y, ScreenFeet.Y)
+                            local CenterX = (ScreenTop.X + ScreenFeet.X) / 2
 
-    local sCorner = Instance.new("UICorner")
-    sCorner.CornerRadius = UDim.new(1, 0)
-    sCorner.Parent = sliderBg
+                            if (ESPBoxesToggle.Value) then
+                                Entry.Box.Visible = true
+                                Entry.Box.Color = IsTeammate and Color3.fromRGB(60, 255, 60) or Color3.fromRGB(255, 60, 60)
+                                Entry.Box.Position = Vector2.new(CenterX - Width / 2, TopY)
+                                Entry.Box.Size = Vector2.new(Width, Height)
+                            else
+                                Entry.Box.Visible = false
+                            end
 
-    local sliderFill = Instance.new("Frame")
-    sliderFill.Size = UDim2.new((defaultVal - minVal) / (maxVal - minVal), 0, 1, 0)
-    sliderFill.BackgroundColor3 = currentAccentColor
-    sliderFill.BorderSizePixel = 0
-    sliderFill.Parent = sliderBg
-    table.insert(themeElements, {Type = "AccentFill", Instance = sliderFill})
+                            if (ESPNameToggle.Value) then
+                                Entry.Name.Visible = true
+                                Entry.Name.Text = Player.Name
+                                Entry.Name.Position = Vector2.new(CenterX, TopY - 15)
+                            else
+                                Entry.Name.Visible = false
+                            end
 
-    local fCorner = Instance.new("UICorner")
-    fCorner.CornerRadius = UDim.new(1, 0)
-    fCorner.Parent = sliderFill
+                            if (ESPHealthToggle.Value) then
+                                Entry.Health.Visible = true
+                                Entry.Health.Text = string.format("%d/%d", math.floor(Humanoid.Health), math.floor(Humanoid.MaxHealth))
+                                Entry.Health.Position = Vector2.new(CenterX, BottomY + 2)
+                            else
+                                Entry.Health.Visible = false
+                            end
 
-    local draggingSlider = false
-
-    local function updateInput(input)
-        local pos = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
-        local val = math.floor(minVal + ((maxVal - minVal) * pos))
-        sliderFill.Size = UDim2.new(pos, 0, 1, 0)
-        label.Text = titleText .. ": " .. tostring(val)
-        if callback then
-            callback(val)
-        end
-    end
-
-    sliderBg.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            draggingSlider = true
-            updateInput(input)
-        end
-    end)
-
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            draggingSlider = false
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if draggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            updateInput(input)
-        end
-    end)
-end
-
--- Helper function for standard dropdowns
-local function createDropdown(parent, titleText, options, defaultOption, callback)
-    local dropContainer = Instance.new("Frame")
-    dropContainer.Size = UDim2.new(1, 0, 0, 45)
-    dropContainer.BackgroundTransparency = 1
-    dropContainer.Parent = parent
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 0, 20)
-    label.BackgroundTransparency = 1
-    label.Text = titleText
-    label.TextColor3 = Color3.fromRGB(228, 228, 231)
-    label.TextSize = 14
-    label.Font = Enum.Font.SourceSansSemibold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = dropContainer
-
-    local selectBtn = Instance.new("TextButton")
-    selectBtn.Size = UDim2.new(1, 0, 0, 22)
-    selectBtn.Position = UDim2.new(0, 0, 0, 22)
-    selectBtn.BackgroundColor3 = currentButtonColor
-    selectBtn.BorderSizePixel = 0
-    selectBtn.Text = "  " .. defaultOption
-    selectBtn.TextColor3 = Color3.fromRGB(212, 212, 216)
-    selectBtn.TextSize = 13
-    selectBtn.Font = Enum.Font.SourceSans
-    selectBtn.TextXAlignment = Enum.TextXAlignment.Left
-    selectBtn.Parent = dropContainer
-    table.insert(themeElements, {Type = "ButtonBg", Instance = selectBtn})
-
-    local bCorner = Instance.new("UICorner")
-    bCorner.CornerRadius = UDim.new(0, 4)
-    bCorner.Parent = selectBtn
-
-    local isOpen = false
-    local listFrame = Instance.new("Frame")
-    listFrame.Size = UDim2.new(1, 0, 0, #options * 24)
-    listFrame.Position = UDim2.new(0, 0, 1, 4)
-    listFrame.BackgroundColor3 = currentButtonColor
-    listFrame.BorderSizePixel = 0
-    listFrame.Visible = false
-    listFrame.ZIndex = 5
-    listFrame.Parent = selectBtn
-    table.insert(themeElements, {Type = "ButtonBg", Instance = listFrame})
-
-    local lCorner = Instance.new("UICorner")
-    lCorner.CornerRadius = UDim.new(0, 4)
-    lCorner.Parent = listFrame
-
-    local layout = Instance.new("UIListLayout")
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Parent = listFrame
-
-    for i, opt in ipairs(options) do
-        local optBtn = Instance.new("TextButton")
-        optBtn.Size = UDim2.new(1, 0, 0, 24)
-        optBtn.BackgroundTransparency = 1
-        optBtn.Text = "  " .. opt
-        optBtn.TextColor3 = Color3.fromRGB(212, 212, 216)
-        optBtn.TextSize = 13
-        optBtn.Font = Enum.Font.SourceSans
-        optBtn.TextXAlignment = Enum.TextXAlignment.Left
-        optBtn.ZIndex = 6
-        optBtn.LayoutOrder = i
-        optBtn.Parent = listFrame
-
-        optBtn.MouseButton1Click:Connect(function()
-            selectBtn.Text = "  " .. opt
-            isOpen = false
-            listFrame.Visible = false
-            if callback then
-                callback(opt)
-            end
-        end)
-    end
-
-    selectBtn.MouseButton1Click:Connect(function()
-        isOpen = not isOpen
-        listFrame.Visible = isOpen
-    end)
-end
-
--- Create content sections for each category on LeftCard
-local combatTab = createTabContentContainer("Combat")
-local visualsTab = createTabContentContainer("Visuals")
-local playerTab = createTabContentContainer("Player")
-local uiSettingsTab = createTabContentContainer("UI Settings")
-
--- ==========================================
--- COMBAT TAB SETUP
--- ==========================================
-local aimbotActive = false
-local aimbotStrength = 5
-local targetPartName = "Head"
-local aimbotKey = Enum.UserInputType.MouseButton2
-
-local hitboxActive = false
-local hitboxSize = 4
-local originalHitboxSizes = {}
-
-local bindingKey = false
-
-createToggle(combatTab, "Aimbot Lock-On", function(state)
-    aimbotActive = state
-end)
-
-local function createKeybindPicker(parent, titleText, defaultKey, callback)
-    local keyContainer = Instance.new("Frame")
-    keyContainer.Size = UDim2.new(1, 0, 0, 36)
-    keyContainer.BackgroundTransparency = 1
-    keyContainer.Parent = parent
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -90, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = titleText
-    label.TextColor3 = Color3.fromRGB(228, 228, 231)
-    label.TextSize = 14
-    label.Font = Enum.Font.SourceSansSemibold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = keyContainer
-
-    local keyBtn = Instance.new("TextButton")
-    keyBtn.Size = UDim2.new(0, 80, 0, 24)
-    keyBtn.Position = UDim2.new(1, -80, 0.5, -12)
-    keyBtn.BackgroundColor3 = currentButtonColor
-    keyBtn.BorderSizePixel = 0
-    keyBtn.Text = typeof(defaultKey) == "EnumItem" and defaultKey.Name or tostring(defaultKey)
-    keyBtn.TextColor3 = Color3.fromRGB(212, 212, 216)
-    keyBtn.TextSize = 12
-    keyBtn.Font = Enum.Font.SourceSansBold
-    keyBtn.Parent = keyContainer
-    table.insert(themeElements, {Type = "ButtonBg", Instance = keyBtn})
-
-    local kCorner = Instance.new("UICorner")
-    kCorner.CornerRadius = UDim.new(0, 4)
-    kCorner.Parent = keyBtn
-
-    keyBtn.MouseButton1Click:Connect(function()
-        if bindingKey then return end
-        bindingKey = true
-        keyBtn.Text = "Press key..."
-        keyBtn.BackgroundColor3 = currentAccentColor
-
-        local connection
-        connection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-            if input.UserInputType == Enum.UserInputType.Keyboard or input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
-                local newKey = input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode or input.UserInputType
-                aimbotKey = newKey
-                keyBtn.Text = input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name or (input.UserInputType == Enum.UserInputType.MouseButton1 and "Mouse1" or "Mouse2")
-                
-                keyBtn.BackgroundColor3 = currentButtonColor
-                bindingKey = false
-                connection:Disconnect()
-                
-                if callback then
-                    callback(newKey)
-                end
-            end
-        end)
-    end)
-end
-
-createKeybindPicker(combatTab, "Aimbot Keybind", Enum.UserInputType.MouseButton2, function(newKey)
-    aimbotKey = newKey
-end)
-
-createDropdown(combatTab, "Target Body Part", {"Head", "HumanoidRootPart", "UpperTorso"}, "Head", function(selected)
-    targetPartName = selected
-end)
-
-createSlider(combatTab, "Lock Strength", 1, 10, 5, function(val)
-    aimbotStrength = val
-end)
-
-createToggle(combatTab, "Hitbox Expander", function(state)
-    hitboxActive = state
-    if not hitboxActive then
-        for char, originalSize in pairs(originalHitboxSizes) do
-            if char and char.Parent and char:FindFirstChild("HumanoidRootPart") then
-                char.HumanoidRootPart.Size = originalSize
-                char.HumanoidRootPart.Transparency = 1
-                char.HumanoidRootPart.CanCollide = false
-            end
-        end
-        originalHitboxSizes = {}
-    end
-end)
-
-createSlider(combatTab, "Hitbox Size", 2, 10, 4, function(val)
-    hitboxSize = val
-end)
-
-local function isKeybindHeld(key)
-    if typeof(key) == "EnumItem" then
-        if key.EnumType == Enum.KeyCode then
-            return UserInputService:IsKeyDown(key)
-        elseif key.EnumType == Enum.UserInputType then
-            return UserInputService:IsMouseButtonPressed(key)
-        end
-    end
-    return false
-end
-
-RunService.RenderStepped:Connect(function()
-    local mousePos = UserInputService:GetMouseLocation()
-
-    if hitboxActive then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                local char = p.Character
-                local rootPart = char.HumanoidRootPart
-                
-                if not originalHitboxSizes[char] then
-                    originalHitboxSizes[char] = rootPart.Size
-                end
-                
-                rootPart.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                rootPart.Transparency = 0.7
-                rootPart.CanCollide = false
-            end
-        end
-    end
-
-    if not aimbotActive then return end
-    if not isKeybindHeld(aimbotKey) then return end
-    
-    local myChar = player.Character
-    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
-    
-    local closestTarget = nil
-    local shortestDistance = math.huge
-    
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character and p.Character:FindFirstChild(targetPartName) then
-            local targetChar = p.Character
-            local humanoid = targetChar:FindFirstChildOfClass("Humanoid")
-            
-            if humanoid and humanoid.Health > 0 then
-                local partPos = targetChar[targetPartName].Position
-                local screenPoint, onScreen = camera:WorldToViewportPoint(partPos)
-                
-                if onScreen then
-                    local targetScreenPos = Vector2.new(screenPoint.X, screenPoint.Y)
-                    local distance = (targetScreenPos - mousePos).Magnitude
-                    
-                    if distance < shortestDistance then
-                        shortestDistance = distance
-                        closestTarget = targetChar[targetPartName]
+                            Show = true
+                        end
                     end
                 end
             end
         end
-    end
-    
-    if closestTarget then
-        local currentCFrame = camera.CFrame
-        local targetCFrame = CFrame.new(currentCFrame.Position, closestTarget.Position)
-        local interpolationFactor = math.clamp(aimbotStrength * 0.1, 0.05, 1)
-        camera.CFrame = currentCFrame:Lerp(targetCFrame, interpolationFactor)
+
+        if (not Show) then
+            Entry.Box.Visible = false
+            Entry.Name.Visible = false
+            Entry.Health.Visible = false
+        end
     end
 end)
 
--- ==========================================
--- VISUALS TAB SETUP (ESP & INVENTORY CHECKER)
--- ==========================================
-local espActive = false
-local activeHighlights = {}
-local activeBillboards = {}
+-- // Extras (Car PVP + Inventory Checker)
+local ESPExtrasGroup = ESPTab:AddRightGroupbox("Extras")
 
-local function updateESP(p)
-    if not p.Character then return end
-    local char = p.Character
-    
-    if activeHighlights[char] then
-        activeHighlights[char]:Destroy()
-        activeHighlights[char] = nil
+local CarPVPToggle = ESPExtrasGroup:AddToggle("CarPVP", {
+    Text = "Car PVP",
+    Default = false,
+    Tooltip = "Force the camera to follow your character",
+})
+
+local CarPVPConnection = nil
+
+local function StartCarPVP()
+    local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local Humanoid = Character:WaitForChild("Humanoid")
+
+    Camera.CameraType = Enum.CameraType.Custom
+    Camera.CameraSubject = Humanoid
+
+    if (CarPVPConnection) then
+        CarPVPConnection:Disconnect()
     end
-    if activeBillboards[char] then
-        activeBillboards[char]:Destroy()
-        activeBillboards[char] = nil
-    end
 
-    if espActive and p ~= player then
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "VisualESP"
-        highlight.Adornee = char
-        highlight.FillColor = currentAccentColor
-        highlight.FillTransparency = 0.5
-        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-        highlight.OutlineTransparency = 0
-        highlight.Parent = char
-        activeHighlights[char] = highlight
-        table.insert(themeElements, {Type = "ESPHighlight", Instance = highlight})
-
-        local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-        if head then
-            local billboard = Instance.new("BillboardGui")
-            billboard.Name = "ESPInfo"
-            billboard.Adornee = head
-            billboard.Size = UDim2.new(0, 150, 0, 40)
-            billboard.StudsOffset = Vector3.new(0, 2.5, 0)
-            billboard.AlwaysOnTop = true
-            billboard.Parent = char
-
-            local textLabel = Instance.new("TextLabel")
-            textLabel.Name = "InfoText"
-            textLabel.Size = UDim2.new(1, 0, 1, 0)
-            textLabel.BackgroundTransparency = 1
-            textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            textLabel.TextSize = 13
-            textLabel.Font = Enum.Font.SourceSansBold
-            textLabel.TextStrokeTransparency = 0.5
-            textLabel.Parent = billboard
-
-            local connection
-            connection = RunService.RenderStepped:Connect(function()
-                if not char or not char.Parent or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
-                    if connection then connection:Disconnect() end
-                    return
-                end
-                local myRoot = player.Character.HumanoidRootPart
-                local targetRoot = char:FindFirstChild("HumanoidRootPart")
-                if targetRoot then
-                    local dist = math.floor((myRoot.Position - targetRoot.Position).Magnitude)
-                    textLabel.Text = p.Name .. " [" .. tostring(dist) .. " studs]"
-                end
-            end)
-
-            activeBillboards[char] = billboard
+    CarPVPConnection = RunService.RenderStepped:Connect(function()
+        if (not CarPVPToggle.Value) then
+            return
         end
-    end
-end
 
-createToggle(visualsTab, "Player ESP Names & Distance", function(state)
-    espActive = state
-    if espActive then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= player then
-                updateESP(p)
-            end
-        end
-    else
-        for char, highlight in pairs(activeHighlights) do
-            if highlight then highlight:Destroy() end
-        end
-        for char, billboard in pairs(activeBillboards) do
-            if billboard then billboard:Destroy() end
-        end
-        activeHighlights = {}
-        activeBillboards = {}
-    end
-end)
+        local Char = LocalPlayer.Character
+        local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
 
--- ==========================================
--- SCREEN GUI HUD INVENTORY CHECKER
--- ==========================================
--- Car PVP Toggle
-
-local carPVPEnabled = false
-local spectateConnection
-
-local function startCarPVP()
-    local character = player.Character or player.CharacterAdded:Wait()
-    local humanoid = character:WaitForChild("Humanoid")
-
-    camera.CameraType = Enum.CameraType.Custom
-    camera.CameraSubject = humanoid
-
-    spectateConnection = RunService.RenderStepped:Connect(function()
-        if carPVPEnabled then
-            local char = player.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-
-            if hum then
-                camera.CameraType = Enum.CameraType.Custom
-                camera.CameraSubject = hum
-            end
+        if (Hum) then
+            Camera.CameraType = Enum.CameraType.Custom
+            Camera.CameraSubject = Hum
         end
     end)
 end
 
-local function stopCarPVP()
-    carPVPEnabled = false
-
-    if spectateConnection then
-        spectateConnection:Disconnect()
-        spectateConnection = nil
+local function StopCarPVP()
+    if (CarPVPConnection) then
+        CarPVPConnection:Disconnect()
+        CarPVPConnection = nil
     end
 
-    local character = player.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local Character = LocalPlayer.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
 
-    if humanoid then
-        camera.CameraType = Enum.CameraType.Custom
-        camera.CameraSubject = humanoid
+    if (Humanoid) then
+        Camera.CameraType = Enum.CameraType.Custom
+        Camera.CameraSubject = Humanoid
     end
 end
 
-createToggle(visualsTab, "Car PVP", function(state)
-    carPVPEnabled = state
-
-    if state then
-        startCarPVP()
+CarPVPToggle:OnChanged(function(Value)
+    if (Value) then
+        StartCarPVP()
     else
-        stopCarPVP()
+        StopCarPVP()
     end
 end)
-local hudGui = Instance.new("ScreenGui")
-hudGui.Name = "InventoryHudGui"
-hudGui.ResetOnSpawn = false
-hudGui.Parent = playerGui
 
-local hudFrame = Instance.new("Frame")
-hudFrame.Name = "HudFrame"
-hudFrame.Size = UDim2.new(0, 220, 0, 300)
-hudFrame.Position = UDim2.new(0, 15, 0.3, 0)
-hudFrame.BackgroundTransparency = 1
-hudFrame.BorderSizePixel = 0
-hudFrame.Visible = false
-hudFrame.Parent = hudGui
+-- // Inventory Checker HUD
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-local hudTitle = Instance.new("TextLabel")
-hudTitle.Size = UDim2.new(1, 0, 0, 30)
-hudTitle.BackgroundTransparency = 1
-hudTitle.Text = "Inventory Checker"
-hudTitle.TextColor3 = Color3.fromRGB(228, 228, 231)
-hudTitle.TextSize = 14
-hudTitle.Font = Enum.Font.SourceSansBold
-hudTitle.TextXAlignment = Enum.TextXAlignment.Left
-hudTitle.Parent = hudFrame
+local HudGui = Instance.new("ScreenGui")
+HudGui.Name = "InventoryHudGui"
+HudGui.ResetOnSpawn = false
+HudGui.Parent = PlayerGui
 
-local hudScroll = Instance.new("ScrollingFrame")
-hudScroll.Size = UDim2.new(1, 0, 1, -30)
-hudScroll.Position = UDim2.new(0, 0, 0, 30)
-hudScroll.BackgroundTransparency = 1
-hudScroll.BorderSizePixel = 0
-hudScroll.ScrollBarThickness = 2
-hudScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-hudScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-hudScroll.Parent = hudFrame
+local HudFrame = Instance.new("Frame")
+HudFrame.Name = "HudFrame"
+HudFrame.Size = UDim2.new(0, 220, 0, 300)
+HudFrame.Position = UDim2.new(0, 15, 0.3, 0)
+HudFrame.BackgroundTransparency = 1
+HudFrame.BorderSizePixel = 0
+HudFrame.Visible = false
+HudFrame.Parent = HudGui
 
-local hudTextLabel = Instance.new("TextLabel")
-hudTextLabel.Size = UDim2.new(1, 0, 1, 0)
-hudTextLabel.BackgroundTransparency = 1
-hudTextLabel.Text = "Scanning inventories..."
-hudTextLabel.TextColor3 = Color3.fromRGB(212, 212, 216)
-hudTextLabel.TextSize = 13
-hudTextLabel.Font = Enum.Font.SourceSansBold
-hudTextLabel.TextXAlignment = Enum.TextXAlignment.Left
-hudTextLabel.TextYAlignment = Enum.TextYAlignment.Top
-hudTextLabel.TextWrapped = true
-hudTextLabel.Parent = hudScroll
+local HudTitle = Instance.new("TextLabel")
+HudTitle.Size = UDim2.new(1, 0, 0, 30)
+HudTitle.BackgroundTransparency = 1
+HudTitle.Text = "Inventory Checker"
+HudTitle.TextColor3 = Color3.fromRGB(228, 228, 231)
+HudTitle.TextSize = 14
+HudTitle.Font = Enum.Font.SourceSansBold
+HudTitle.TextXAlignment = Enum.TextXAlignment.Left
+HudTitle.Parent = HudFrame
 
-createToggle(visualsTab, "Inventory Checker HUD", function(state)
-    hudFrame.Visible = state
-end)
+local HudScroll = Instance.new("ScrollingFrame")
+HudScroll.Size = UDim2.new(1, 0, 1, -30)
+HudScroll.Position = UDim2.new(0, 0, 0, 30)
+HudScroll.BackgroundTransparency = 1
+HudScroll.BorderSizePixel = 0
+HudScroll.ScrollBarThickness = 2
+HudScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+HudScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+HudScroll.Parent = HudFrame
 
--- Blockspin database
+local HudTextLabel = Instance.new("TextLabel")
+HudTextLabel.Size = UDim2.new(1, 0, 0, 0)
+HudTextLabel.AutomaticSize = Enum.AutomaticSize.Y
+HudTextLabel.BackgroundTransparency = 1
+HudTextLabel.Text = "Scanning inventories..."
+HudTextLabel.TextColor3 = Color3.fromRGB(212, 212, 216)
+HudTextLabel.TextSize = 13
+HudTextLabel.Font = Enum.Font.SourceSansBold
+HudTextLabel.TextXAlignment = Enum.TextXAlignment.Left
+HudTextLabel.TextYAlignment = Enum.TextYAlignment.Top
+HudTextLabel.TextWrapped = true
+HudTextLabel.Parent = HudScroll
+
+local InvCheckerToggle = ESPExtrasGroup:AddToggle("InventoryChecker", {
+    Text = "Inventory Checker HUD",
+    Default = false,
+    Tooltip = "Show a HUD that scans every player's inventory",
+    Callback = function(Value)
+        HudFrame.Visible = Value
+    end,
+})
+
+-- // BlockSpin weapon database
 local ITEM_DATABASE = {
     {meshPattern = "c9_cube", displayName = "C9", color = Color3.new(1, 1, 1), isPrefix = true},
     {meshPattern = "glock_colt45", displayName = "Glock", color = Color3.new(1, 1, 1), isPrefix = true},
@@ -807,14 +568,14 @@ local ITEM_DATABASE = {
     {meshPattern = "new melees_plane.005", displayName = "Tactical Knife", color = Color3.new(1, 1, 0)},
     {meshPattern = "new melees_plane", displayName = "Tactical Axe", color = Color3.new(1, 1, 0)},
     {meshPattern = "weapon tools_cube.006", displayName = "Switchblade", color = Color3.new(1, 165/255, 0)},
-    {meshPattern = "weapon tools_1.001", displayName = "Barbed Bat", color = Color3.new(1, 0, 0)}, 
+    {meshPattern = "weapon tools_1.001", displayName = "Barbed Bat", color = Color3.new(1, 0, 0)},
     {meshPattern = "1a_Plane", displayName = "Combat Axe", color = Color3.new(1, 0, 0), isPrefix = true}
 }
 
 task.spawn(function()
     while true do
         pcall(function()
-            if hudFrame.Visible then
+            if HudFrame.Visible then
                 local DISPLAYENTRIES = {}
                 for _, instance in ipairs(Players:GetChildren()) do
                     if not instance:IsA("Player") then continue end
@@ -887,9 +648,9 @@ task.spawn(function()
 
                 local resultStr = table.concat(DISPLAYENTRIES, "\n\n")
                 if resultStr == "" then
-                    hudTextLabel.Text = "No player inventories detected."
+                    HudTextLabel.Text = "No player inventories detected."
                 else
-                    hudTextLabel.Text = resultStr
+                    HudTextLabel.Text = resultStr
                 end
             end
         end)
@@ -897,332 +658,216 @@ task.spawn(function()
     end
 end)
 
+-- // UI visibility toggle (also bound to a key, default: Right Shift)
+local UISettingsGroup = Tabs["UI Settings"]:AddLeftGroupbox("UI")
 
-local function createUIToggleKeybind(parent)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(1,0,0,36)
-    container.BackgroundTransparency = 1
-    container.Parent = parent
+local ShowUIToggle = UISettingsGroup:AddToggle("ShowUI", {
+    Text = "Show UI",
+    Default = true,
+    Tooltip = "Show or hide the menu (also toggled by the key)",
+    Callback = function(Value)
+        Window.Holder.Visible = Value
+    end,
+})
+ShowUIToggle:AddKeyPicker("ShowUIKey", {
+    Text = "UI Toggle Key",
+    Default = Enum.KeyCode.RightShift,
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Modes = {"Toggle"},
+    IgnoreProcessedCheck = true,
+})
+local ShowUIKey = ShowUIToggle.Addons[1]
 
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1,-90,1,0)
-    label.BackgroundTransparency = 1
-    label.Text = "UI Toggle Key"
-    label.TextColor3 = Color3.fromRGB(228,228,231)
-    label.TextSize = 14
-    label.Font = Enum.Font.SourceSansSemibold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = container
+-- // Theme manager (populates part of the "UI Settings" tab)
+ThemeManager:SetLibrary(Library)
+ThemeManager:SetFolder("BlockSpinLegit")
+ThemeManager:ApplyToTab(Tabs["UI Settings"])
 
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(0,80,0,24)
-    button.Position = UDim2.new(1,-80,0.5,-12)
-    button.BackgroundColor3 = currentButtonColor
-    button.Text = uiToggleKey.Name
-    button.TextColor3 = Color3.fromRGB(212,212,216)
-    button.TextSize = 12
-    button.Font = Enum.Font.SourceSansBold
-    button.Parent = container
+-- // Self-contained config saving. This does NOT rely on the global
+-- // Options/Toggles tables (other scripts that load LinoriaLib overwrite
+-- // them), so the config buttons always work.
+local HttpService = game:GetService("HttpService")
+local CONFIG_FOLDER = "BlockSpinLegit/Configs/settings"
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0,4)
-    corner.Parent = button
+for _, Folder in ipairs({ "BlockSpinLegit", "BlockSpinLegit/Configs", CONFIG_FOLDER }) do
+    if not isfolder(Folder) then
+        makefolder(Folder)
+    end
+end
 
-    local waiting = false
-    button.MouseButton1Click:Connect(function()
-        if waiting then return end
-        waiting = true
-        button.Text = "Press..."
-        local con
-        con = UserInputService.InputBegan:Connect(function(input, gp)
-            if gp then return end
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                uiToggleKey = input.KeyCode
-                button.Text = input.KeyCode.Name
-                waiting = false
-                con:Disconnect()
+-- // Everything we want to persist, captured as direct references
+local SaveToggles = {
+    Enabled = EnabledToggle,
+    TeamCheck = TeamCheckToggle,
+    ESPEnabled = ESPToggle,
+    ESPBoxes = ESPBoxesToggle,
+    ESPName = ESPNameToggle,
+    ESPHealth = ESPHealthToggle,
+    ESPTeamCheck = ESPTeamCheckToggle,
+    CarPVP = CarPVPToggle,
+    InventoryChecker = InvCheckerToggle,
+}
+
+local SaveOptions = {
+    EnabledKey = EnabledKey,
+    FOV = FOVSlider,
+    Hitbox = HitboxDropdown,
+    Smoothness = SmoothnessSlider,
+    MaxDistance = MaxDistanceSlider,
+    Prediction = PredictionSlider,
+    ESPDistance = ESPDistanceSlider,
+}
+
+local ConfigGroup = Tabs["UI Settings"]:AddRightGroupbox("Configuration")
+
+local ConfigListDropdown = ConfigGroup:AddDropdown("ConfigList", {
+    Text = "Config list",
+    Values = {},
+    AllowNull = true,
+})
+
+local ConfigNameInput = ConfigGroup:AddInput("ConfigName", {
+    Text = "Config name",
+})
+
+local function GetConfigList()
+    local out = {}
+    for _, file in ipairs(listfiles(CONFIG_FOLDER)) do
+        local Name = file:match("([^/\\]+)%.json$")
+        if (Name) then
+            table.insert(out, Name)
+        end
+    end
+    return out
+end
+
+local function RefreshConfigList()
+    ConfigListDropdown.Values = GetConfigList()
+    ConfigListDropdown:SetValues()
+    ConfigListDropdown:SetValue(nil)
+end
+
+local function SaveConfig(Name)
+    if (not Name or Name:gsub("%s", "") == "") then
+        return Library:Notify("Invalid config name (empty)", 2)
+    end
+
+    local Data = { objects = {} }
+
+    for Idx, Toggle in next, SaveToggles do
+        table.insert(Data.objects, { type = "Toggle", idx = Idx, value = Toggle.Value })
+    end
+
+    for Idx, Option in next, SaveOptions do
+        local Type = Option.Type
+        if (Type == "Slider") then
+            table.insert(Data.objects, { type = "Slider", idx = Idx, value = tostring(Option.Value) })
+        elseif (Type == "Dropdown") then
+            table.insert(Data.objects, { type = "Dropdown", idx = Idx, value = Option.Value, mutli = Option.Multi })
+        elseif (Type == "KeyPicker") then
+            table.insert(Data.objects, { type = "KeyPicker", idx = Idx, mode = Option.Mode, key = Option.Value })
+        end
+    end
+
+    local Success, Encoded = pcall(HttpService.JSONEncode, HttpService, Data)
+    if (not Success) then
+        return Library:Notify("Failed to save config: encode error", 3)
+    end
+
+    writefile(CONFIG_FOLDER .. "/" .. Name .. ".json", Encoded)
+    Library:Notify(string.format('Created config "%s"', Name), 3)
+    RefreshConfigList()
+end
+
+local function LoadConfig(Name)
+    if (not Name) then
+        return Library:Notify("No config selected", 2)
+    end
+
+    local Path = CONFIG_FOLDER .. "/" .. Name .. ".json"
+    if (not isfile(Path)) then
+        return Library:Notify("Config not found", 2)
+    end
+
+    local Success, Decoded = pcall(HttpService.JSONDecode, HttpService, readfile(Path))
+    if (not Success) then
+        return Library:Notify("Failed to load config: decode error", 3)
+    end
+
+    for _, Object in next, Decoded.objects do
+        local Toggle = SaveToggles[Object.idx]
+        local Option = SaveOptions[Object.idx]
+
+        if (Toggle and Object.type == "Toggle") then
+            Toggle:SetValue(Object.value)
+        elseif (Option) then
+            if (Object.type == "Slider") then
+                Option:SetValue(Object.value)
+            elseif (Object.type == "Dropdown") then
+                Option:SetValue(Object.value)
+            elseif (Object.type == "KeyPicker") then
+                Option:SetValue({ Object.key, Object.mode })
             end
-        end)
-    end)
+        end
+    end
+
+    Library:Notify(string.format('Loaded config "%s"', Name), 3)
 end
 
--- ==========================================
--- UI SETTINGS TAB (Customization Options)
--- ==========================================
-createDropdown(uiSettingsTab, "Color Theme Style", {"Midnight Blue", "Dark", "Deep Ocean", "Slate"}, "Midnight Blue", function(selected)
-    for _, item in ipairs(themeElements) do
-        if item.Type == "Background" then
-            if selected == "Midnight Blue" then
-                currentBgColor = Color3.fromRGB(6, 9, 18)
-                currentButtonColor = Color3.fromRGB(12, 16, 28)
-            elseif selected == "Dark" then
-                currentBgColor = Color3.fromRGB(10, 10, 12)
-                currentButtonColor = Color3.fromRGB(18, 18, 22)
-            elseif selected == "Deep Ocean" then
-                currentBgColor = Color3.fromRGB(4, 18, 35)
-                currentButtonColor = Color3.fromRGB(10, 28, 50)
-            elseif selected == "Slate" then
-                currentBgColor = Color3.fromRGB(18, 21, 28)
-                currentButtonColor = Color3.fromRGB(26, 31, 40)
-            end
-            
-            -- Apply background change
-            item.Instance.BackgroundColor3 = currentBgColor
+ConfigGroup:AddDivider()
+
+ConfigGroup:AddButton({
+    Text = "Create config",
+    Func = function()
+        SaveConfig(ConfigNameInput.Value)
+    end,
+})
+
+ConfigGroup:AddButton({
+    Text = "Overwrite config",
+    Func = function()
+        local Name = ConfigListDropdown.Value
+        if (Name) then
+            SaveConfig(Name)
+        else
+            Library:Notify("No config selected", 2)
         end
-    end
+    end,
+})
 
-    -- Automatically sync button/element colors to match the selected theme background nicely
-    for _, item in ipairs(themeElements) do
-        if item.Type == "ButtonBg" then
-            item.Instance.BackgroundColor3 = currentButtonColor
+ConfigGroup:AddButton({
+    Text = "Load config",
+    Func = function()
+        LoadConfig(ConfigListDropdown.Value)
+    end,
+})
+
+ConfigGroup:AddButton({
+    Text = "Refresh config list",
+    Func = RefreshConfigList,
+})
+
+local AutoloadLabel = ConfigGroup:AddLabel("Current autoload config: none", true)
+local AUTOLOAD_FILE = CONFIG_FOLDER .. "/autoload.txt"
+
+ConfigGroup:AddButton({
+    Text = "Autoload config",
+    Func = function()
+        local Name = ConfigListDropdown.Value
+        if (not Name) then
+            return Library:Notify("No config selected", 2)
         end
-    end
-end)
+        writefile(AUTOLOAD_FILE, Name)
+        AutoloadLabel:SetText("Current autoload config: " .. Name)
+        Library:Notify(string.format('Set "%s" to auto load', Name), 3)
+    end,
+})
 
-createDropdown(uiSettingsTab, "Accent Color", {"Indigo", "Emerald", "Ruby", "Gold", "Cyan"}, "Indigo", function(selected)
-    if selected == "Indigo" then
-        currentAccentColor = Color3.fromRGB(99, 102, 241)
-    elseif selected == "Emerald" then
-        currentAccentColor = Color3.fromRGB(16, 185, 129)
-    elseif selected == "Ruby" then
-        currentAccentColor = Color3.fromRGB(239, 68, 68)
-    elseif selected == "Gold" then
-        currentAccentColor = Color3.fromRGB(245, 158, 11)
-    elseif selected == "Cyan" then
-        currentAccentColor = Color3.fromRGB(6, 182, 212)
-    end
-
-    -- Update active accent elements dynamically
-    for _, item in ipairs(themeElements) do
-        if item.Type == "AccentFill" or item.Type == "AccentButton" then
-            item.Instance.BackgroundColor3 = currentAccentColor
-        elseif item.Type == "ESPHighlight" and item.Instance.Parent then
-            item.Instance.FillColor = currentAccentColor
-        end
-    end
-end)
-
-createSlider(uiSettingsTab, "Background Opacity", 0, 50, 0, function(val)
-    mainTransparency = val * 0.01
-    for _, item in ipairs(themeElements) do
-        if item.Type == "Background" then
-            item.Instance.BackgroundTransparency = mainTransparency
-        end
-    end
-end)
-
-createUIToggleKeybind(uiSettingsTab)
-
-
-
-
-
-
-
-createToggle(uiSettingsTab, "Rejoin Server", function(enabled)
-    if enabled then
-        TeleportService:Teleport(game.PlaceId, player)
-    end
-end)
-
--- Populate Player Tab
-
-local walkSpeed = 16
-local jumpPower = 20
-
-createSlider(playerTab, "Walk Speed", 16, 100, 16, function(val)
-    walkSpeed = val
-    local char = player.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.WalkSpeed = walkSpeed
-    end
-end)
-
-createSlider(playerTab, "Jump Power", 20, 150, 50, function(val)
-    jumpPower = val
-    local char = player.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.UseJumpPower = true
-        hum.JumpPower = jumpPower
-    end
-end)
-
-local function applyMovement()
-    local char = player.Character
-    if not char then return end
-    local hum = char:WaitForChild("Humanoid")
-    hum.UseJumpPower = true
-    hum.WalkSpeed = walkSpeed
-    hum.JumpPower = jumpPower
+if (isfile(AUTOLOAD_FILE)) then
+    local Name = readfile(AUTOLOAD_FILE)
+    AutoloadLabel:SetText("Current autoload config: " .. Name)
+    LoadConfig(Name)
 end
 
-player.CharacterAdded:Connect(applyMovement)
-task.defer(applyMovement)
-
--- 5. Create Top Bar for Search
-local topBar = Instance.new("Frame")
-topBar.Name = "TopBar"
-topBar.Size = UDim2.new(1, -182, 0, 45)
-topBar.Position = UDim2.new(0, 170, 0, 12)
-topBar.BackgroundColor3 = currentBgColor
-topBar.BackgroundTransparency = mainTransparency
-topBar.BorderSizePixel = 0
-topBar.Parent = mainFrame
-table.insert(themeElements, {Type = "Background", Instance = topBar})
-
-local topBarCorner = Instance.new("UICorner")
-topBarCorner.CornerRadius = UDim.new(0, 6)
-topBarCorner.Parent = topBar
-
-local searchLabel = Instance.new("TextLabel")
-searchLabel.Name = "SearchPlaceholder"
-searchLabel.Size = UDim2.new(1, -20, 1, 0)
-searchLabel.Position = UDim2.new(0, 10, 0, 0)
-searchLabel.BackgroundTransparency = 1
-searchLabel.Text = "Search..."
-searchLabel.TextColor3 = Color3.fromRGB(113, 113, 122)
-searchLabel.TextSize = 14
-searchLabel.Font = Enum.Font.SourceSans
-searchLabel.TextXAlignment = Enum.TextXAlignment.Left
-searchLabel.Parent = topBar
-
--- ==========================================
--- RIGHT CARD: INFO PANEL
--- ==========================================
-
-local infoTitle = Instance.new("TextLabel")
-infoTitle.Size = UDim2.new(1, -20, 0, 24)
-infoTitle.Position = UDim2.new(0, 10, 0, 10)
-infoTitle.BackgroundTransparency = 1
-infoTitle.Text = "Pancake Hub"
-infoTitle.TextColor3 = Color3.fromRGB(228, 228, 231)
-infoTitle.TextSize = 14
-infoTitle.Font = Enum.Font.SourceSansBold
-infoTitle.TextXAlignment = Enum.TextXAlignment.Left
-infoTitle.Parent = rightCard
-
-
-local infoScroll = Instance.new("ScrollingFrame")
-infoScroll.Size = UDim2.new(1, 0, 1, -40)
-infoScroll.Position = UDim2.new(0, 0, 0, 40)
-infoScroll.BackgroundTransparency = 1
-infoScroll.BorderSizePixel = 0
-infoScroll.ScrollBarThickness = 2
-infoScroll.CanvasSize = UDim2.new(0,0,0,0)
-infoScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-infoScroll.Parent = rightCard
-
-
-local infoLayout = Instance.new("UIListLayout")
-infoLayout.SortOrder = Enum.SortOrder.LayoutOrder
-infoLayout.Padding = UDim.new(0,8)
-infoLayout.Parent = infoScroll
-
-
-local infoPadding = Instance.new("UIPadding")
-infoPadding.PaddingTop = UDim.new(0,10)
-infoPadding.PaddingLeft = UDim.new(0,10)
-infoPadding.PaddingRight = UDim.new(0,10)
-infoPadding.Parent = infoScroll
-
-
-local function createInfo(text)
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1,0,0,30)
-    label.BackgroundColor3 = currentButtonColor
-    label.BorderSizePixel = 0
-    label.Text = text
-    label.TextColor3 = Color3.fromRGB(212,212,216)
-    label.TextSize = 13
-    label.Font = Enum.Font.SourceSansSemibold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = infoScroll
-    table.insert(themeElements,{Type="ButtonBg",Instance=label})
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0,4)
-    corner.Parent = label
-end
-
-
-createInfo("✅ Updated Aim")
-createInfo("✅ Updated ESP")
-createInfo("✅ Updated Rejoin")
-createInfo("✅ Updated Player")
-createInfo("✅ pancake hub")
-createInfo("✅ added car pvp")
-createInfo("⭐ by @corruptedlore on discord")
-createInfo("when turning off car cheats")
-createInfo("you have to leave the car")
-createInfo("for the cheats to turn off")
-
-
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == uiToggleKey then
-        uiVisible = not uiVisible
-        mainFrame.Visible = uiVisible
-    end
-end)
-
--- 5. Helper function to create sidebar buttons with switching functionality
-local function createSidebarButton(name, layoutOrder)
-    local btn = Instance.new("TextButton")
-    btn.Name = name .. "Button"
-    btn.Size = UDim2.new(1, 0, 0, 32)
-    btn.BackgroundColor3 = currentButtonColor
-    btn.BorderSizePixel = 0
-    btn.Text = name
-    btn.TextColor3 = Color3.fromRGB(212, 212, 216)
-    btn.TextSize = 14
-    btn.Font = Enum.Font.SourceSansSemibold
-    btn.LayoutOrder = layoutOrder
-    btn.Parent = sidebar
-    table.insert(themeElements, {Type = "ButtonBg", Instance = btn})
-
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 4)
-    btnCorner.Parent = btn
-    
-    btn.MouseButton1Click:Connect(function()
-        for _, container in pairs(tabContents) do
-            container.Visible = false
-        end
-        if tabContents[name] then
-            tabContents[name].Visible = true
-        end
-        rightCard.Visible = true
-    end)
-    
-    return btn
-end
-
--- Add Tabs to Sidebar
-createSidebarButton("Combat", 1)
-createSidebarButton("Visuals", 2)
-createSidebarButton("Player", 3)
-createSidebarButton("UI Settings", 4)
-
--- Default to showing the Combat tab on startup
-combatTab.Visible = true
-]====]
-    
-    -- Execute the encrypted block from local memory safely
-    local executable, err = loadstring(encrypted_code)
-    if executable then
-        executable()
-    else
-        warn("[CRITICAL ERROR]: Target bytecode execution failure: " .. tostring(err))
-    end
-    -- ========================================================== --
-    
-else
-    -- Kick protocol for invalid key inputs
-    if player then
-        player:Kick("\n[ACCESS DENIED]\nYour script_key is invalid or expired.")
-    else
-        game:GetService("Players").LocalPlayer:Kick("Invalid Key.")
-    end
-end
+Window:SelectTab(1)
