@@ -206,7 +206,7 @@ local MaxDistanceSlider = AimingGroup:AddSlider("MaxDistance", {
     Text = "Max Distance",
     Default = 200,
     Min = 5,
-    Max = 500,
+    Max = 1500,
     Suffix = " studs",
     Rounding = 1,
     Tooltip = "Maximum range to look for targets",
@@ -369,10 +369,16 @@ local ESPDistanceSlider = ESPGroup:AddSlider("ESPDistance", {
     Text = "Max Distance",
     Default = 200,
     Min = 5,
-    Max = 500,
+    Max = 1500,
     Suffix = " studs",
     Rounding = 1,
     Tooltip = "Maximum range to draw ESP for",
+})
+
+local ESPColorPicker = ESPGroup:AddColorPicker("ESPColor", {
+    Text = "ESP Color",
+    Default = Color3.fromRGB(255, 60, 60),
+    Tooltip = "Color for ESP boxes and text",
 })
 
 local ESPCache = {}
@@ -442,47 +448,46 @@ RunService:BindToRenderStep("BlockSpinESP", Enum.RenderPriority.Character.Value,
             if (not (ESPTeamCheckToggle.Value and IsTeammate)) then
                 local Range = (RootPart.Position - Camera.CFrame.Position).Magnitude
                 if (Range <= MaxDist) then
-                    local ScreenHead, OnHead = Camera:WorldToScreenPoint(Head.Position)
-                    if (OnHead) then
-                        local HeadTop = Head.Position + Head.CFrame.UpVector * (Head.Size.Y / 2)
-                        local Feet = RootPart.Position - RootPart.CFrame.UpVector * (RootPart.Size.Y / 2)
-                        local ScreenTop, OnTop = Camera:WorldToScreenPoint(HeadTop)
-                        local ScreenFeet, OnFeet = Camera:WorldToScreenPoint(Feet)
+                    local CF, Size = Character:GetBoundingBox()
+                    local HeadTop = CF.Position + Vector3.new(0, Size.Y / 2, 0)
+                    local FeetPos = CF.Position - Vector3.new(0, Size.Y / 2, 0)
+                    local ScreenTop, OnTop = Camera:WorldToScreenPoint(HeadTop)
+                    local ScreenFeet, OnFeet = Camera:WorldToScreenPoint(FeetPos)
 
-                        if (OnTop and OnFeet) then
-                            local Height = math.abs(ScreenFeet.Y - ScreenTop.Y)
-                            local Width = Height * 0.6
-                            local TopY = math.min(ScreenTop.Y, ScreenFeet.Y)
-                            local BottomY = math.max(ScreenTop.Y, ScreenFeet.Y)
-                            local CenterX = (ScreenTop.X + ScreenFeet.X) / 2
+                    if (OnTop and OnFeet) then
+                        local TopY = math.min(ScreenTop.Y, ScreenFeet.Y)
+                        local BottomY = math.max(ScreenTop.Y, ScreenFeet.Y)
+                        local BoxHeight = BottomY - TopY
+                        local BoxWidth = BoxHeight * 0.6
+                        local CenterX = (ScreenTop.X + ScreenFeet.X) / 2
 
-                            if (ESPBoxesToggle.Value) then
-                                Entry.Box.Visible = true
-                                Entry.Box.Color = IsTeammate and Color3.fromRGB(60, 255, 60) or Color3.fromRGB(255, 60, 60)
-                                Entry.Box.Position = Vector2.new(CenterX - Width / 2, TopY)
-                                Entry.Box.Size = Vector2.new(Width, Height)
-                            else
-                                Entry.Box.Visible = false
-                            end
-
-                            if (ESPNameToggle.Value) then
-                                Entry.Name.Visible = true
-                                Entry.Name.Text = Player.Name
-                                Entry.Name.Position = Vector2.new(CenterX, TopY - 15)
-                            else
-                                Entry.Name.Visible = false
-                            end
-
-                            if (ESPHealthToggle.Value) then
-                                Entry.Health.Visible = true
-                                Entry.Health.Text = string.format("%d/%d", math.floor(Humanoid.Health), math.floor(Humanoid.MaxHealth))
-                                Entry.Health.Position = Vector2.new(CenterX, BottomY + 2)
-                            else
-                                Entry.Health.Visible = false
-                            end
-
-                            Show = true
+                        if (ESPBoxesToggle.Value) then
+                            Entry.Box.Visible = true
+                            Entry.Box.Color = IsTeammate and Color3.fromRGB(60, 255, 60) or ESPColorPicker.Value
+                            Entry.Box.Position = Vector2.new(CenterX - BoxWidth / 2, TopY)
+                            Entry.Box.Size = Vector2.new(BoxWidth, BoxHeight)
+                        else
+                            Entry.Box.Visible = false
                         end
+
+                        if (ESPNameToggle.Value) then
+                            Entry.Name.Visible = true
+                            Entry.Name.Text = Player.Name
+                            Entry.Name.Color = IsTeammate and Color3.fromRGB(60, 255, 60) or ESPColorPicker.Value
+                            Entry.Name.Position = Vector2.new(CenterX, TopY - 15)
+                        else
+                            Entry.Name.Visible = false
+                        end
+
+                        if (ESPHealthToggle.Value) then
+                            Entry.Health.Visible = true
+                            Entry.Health.Text = string.format("%d/%d", math.floor(Humanoid.Health), math.floor(Humanoid.MaxHealth))
+                            Entry.Health.Position = Vector2.new(CenterX, BottomY + 2)
+                        else
+                            Entry.Health.Visible = false
+                        end
+
+                        Show = true
                     end
                 end
             end
@@ -794,6 +799,7 @@ local SaveOptions = {
     MaxDistance = MaxDistanceSlider,
     Prediction = PredictionSlider,
     ESPDistance = ESPDistanceSlider,
+    ESPColor = ESPColorPicker,
 }
 
 local ConfigGroup = Tabs["UI Settings"]:AddRightGroupbox("Configuration")
@@ -844,6 +850,8 @@ local function SaveConfig(Name)
             table.insert(Data.objects, { type = "Dropdown", idx = Idx, value = Option.Value, mutli = Option.Multi })
         elseif (Type == "KeyPicker") then
             table.insert(Data.objects, { type = "KeyPicker", idx = Idx, mode = Option.Mode, key = Option.Value })
+        elseif (Type == "ColorPicker") then
+            table.insert(Data.objects, { type = "ColorPicker", idx = Idx, r = Option.Value.R, g = Option.Value.G, b = Option.Value.B })
         end
     end
 
@@ -885,6 +893,8 @@ local function LoadConfig(Name)
                 Option:SetValue(Object.value)
             elseif (Object.type == "KeyPicker") then
                 Option:SetValue({ Object.key, Object.mode })
+            elseif (Object.type == "ColorPicker") then
+                Option:SetValue(Color3.new(Object.r, Object.g, Object.b))
             end
         end
     end
