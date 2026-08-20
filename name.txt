@@ -103,6 +103,7 @@ if VALID_KEYS[userEnteredKey] then
     local Players = game:GetService("Players")
     local RunService = game:GetService("RunService")
     local Workspace = game:GetService("Workspace")
+    local UserInputService = game:GetService("UserInputService")
     local LocalPlayer = Players.LocalPlayer
     local Camera = Workspace.CurrentCamera or Workspace:FindFirstChildOfClass("Camera")
 
@@ -169,20 +170,10 @@ if VALID_KEYS[userEnteredKey] then
 
     local PriorityDropdown = AimingGroup:AddDropdown("Priority", {
         Text = "Target Priority",
-        Values = {"Crosshair", "Distance", "Health", "FOV + Distance"},
+        Values = {"Crosshair", "Distance", "Health"},
         Default = 1,
         Multi = false,
         Tooltip = "How targets are ranked",
-    })
-
-    local FOVSlider = AimingGroup:AddSlider("FOV", {
-        Text = "FOV",
-        Default = 90,
-        Min = 5,
-        Max = 800,
-        Suffix = "px",
-        Rounding = 1,
-        Tooltip = "Only targets inside this distance from the crosshair get locked",
     })
 
     local SmoothnessSlider = AimingGroup:AddSlider("Smoothness", {
@@ -245,24 +236,31 @@ if VALID_KEYS[userEnteredKey] then
         Default = true,
     })
 
-    -- // FOV Circle & Target Marker (Drawing API)
-    local FOVCircle = Drawing.new("Circle")
-    FOVCircle.Thickness = 1.5
-    FOVCircle.NumSides = 80
-    FOVCircle.Radius = FOVSlider.Value
-    FOVCircle.Filled = false
-    FOVCircle.Transparency = 0.7
-    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-    FOVCircle.Visible = false
+    -- // Target Marker (Instance-based — no Drawing API needed)
+    local MarkerGui = Instance.new("ScreenGui")
+    MarkerGui.Name = "PancakeMarker"
+    MarkerGui.ResetOnSpawn = false
+    MarkerGui.DisplayOrder = 999
+    MarkerGui.Parent = game:GetService("CoreGui")
 
-    local TargetMarker = Drawing.new("Circle")
-    TargetMarker.Thickness = 2
-    TargetMarker.NumSides = 40
-    TargetMarker.Radius = 8
-    TargetMarker.Filled = true
-    TargetMarker.Transparency = 0.8
-    TargetMarker.Color = Color3.fromRGB(255, 50, 50)
-    TargetMarker.Visible = false
+    local MarkerFrame = Instance.new("Frame")
+    MarkerFrame.Name = "TargetDot"
+    MarkerFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    MarkerFrame.Size = UDim2.new(0, 10, 0, 10)
+    MarkerFrame.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+    MarkerFrame.BorderSizePixel = 0
+    MarkerFrame.Parent = MarkerGui
+
+    local MarkerCorner = Instance.new("UICorner")
+    MarkerCorner.CornerRadius = UDim.new(1, 0)
+    MarkerCorner.Parent = MarkerFrame
+
+    local MarkerStroke = Instance.new("UIStroke")
+    MarkerStroke.Color = Color3.new(0, 0, 0)
+    MarkerStroke.Thickness = 1
+    MarkerStroke.Parent = MarkerFrame
+
+    MarkerFrame.Visible = false
 
     -- // Helpers
     local function GetCharacter(Player)
@@ -312,7 +310,7 @@ if VALID_KEYS[userEnteredKey] then
 
     local function CollectTargets()
         local list = {}
-        local ViewportCenter = Camera.ViewportSize / 2
+        local MousePos = UserInputService:GetMouseLocation()
 
         for _, Player in ipairs(Players:GetPlayers()) do
             if (Player == LocalPlayer) then continue end
@@ -335,7 +333,8 @@ if VALID_KEYS[userEnteredKey] then
             local ScreenPos, OnScreen = Camera:WorldToScreenPoint(Part.Position)
             if (not OnScreen) then continue end
 
-            local ScreenDistance = (Vector2.new(ScreenPos.X, ScreenPos.Y) - ViewportCenter).Magnitude
+            local ScreenDistance = (Vector2.new(ScreenPos.X, ScreenPos.Y) - MousePos).Magnitude
+
             if (ScreenDistance > FOVSlider.Value) then continue end
 
             if (WallCheckToggle.Value and not CanSeeTarget(Part.Position)) then continue end
@@ -365,10 +364,6 @@ if VALID_KEYS[userEnteredKey] then
             table.sort(list, function(a, b) return a.WorldDist < b.WorldDist end)
         elseif mode == "Health" then
             table.sort(list, function(a, b) return a.Health < b.Health end)
-        elseif mode == "FOV + Distance" then
-            table.sort(list, function(a, b)
-                return (a.ScreenDist + a.WorldDist * 0.5) < (b.ScreenDist + b.WorldDist * 0.5)
-            end)
         end
         return list[1]
     end
@@ -381,16 +376,17 @@ if VALID_KEYS[userEnteredKey] then
 
         local Active = EnabledToggle.Value and EnabledKey:GetState()
         local ViewportCenter = Camera.ViewportSize / 2
+        local MousePos = UserInputService:GetMouseLocation()
 
-        -- Update FOV circle
-        FOVCircle.Position = ViewportCenter
+        -- Update FOV circle (follows mouse)
+        FOVCircle.Position = MousePos
         FOVCircle.Radius = FOVSlider.Value
         FOVCircle.Visible = ShowFOVToggle.Value
 
         if (not Active) then
             CurrentTarget = nil
             LockedPart = nil
-            TargetMarker.Visible = false
+            MarkerFrame.Visible = false
             return
         end
 
@@ -398,7 +394,7 @@ if VALID_KEYS[userEnteredKey] then
         if #list == 0 then
             CurrentTarget = nil
             LockedPart = nil
-            TargetMarker.Visible = false
+            MarkerFrame.Visible = false
             return
         end
 
@@ -406,7 +402,7 @@ if VALID_KEYS[userEnteredKey] then
         if not best then
             CurrentTarget = nil
             LockedPart = nil
-            TargetMarker.Visible = false
+            MarkerFrame.Visible = false
             return
         end
 
@@ -436,13 +432,23 @@ if VALID_KEYS[userEnteredKey] then
         if ShowTargetToggle.Value then
             local sp, OnScreen = Camera:WorldToScreenPoint(Point)
             if OnScreen then
-                TargetMarker.Position = Vector2.new(sp.X, sp.Y)
-                TargetMarker.Visible = true
+                MarkerFrame.Position = UDim2.new(0, sp.X, 0, sp.Y)
+                MarkerFrame.Visible = true
             else
-                TargetMarker.Visible = false
+    MarkerFrame.Visible = false
+
+    -- // FOV Circle (Drawing API — follows mouse cursor)
+    local FOVCircle = Drawing.new("Circle")
+    FOVCircle.Thickness = 1.5
+    FOVCircle.NumSides = 80
+    FOVCircle.Radius = FOVSlider.Value
+    FOVCircle.Filled = false
+    FOVCircle.Transparency = 0.7
+    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+    FOVCircle.Visible = false
             end
         else
-            TargetMarker.Visible = false
+            MarkerFrame.Visible = false
         end
     end)
 
@@ -967,7 +973,6 @@ if VALID_KEYS[userEnteredKey] then
                 if data.NameLabel then data.NameLabel.TextColor3 = preset end
                 if data.Highlight then data.Highlight.OutlineColor = preset end
             end
-            FOVCircle.Color = preset
         end
     end)
 
@@ -1009,7 +1014,6 @@ if VALID_KEYS[userEnteredKey] then
         AimbotMode = AimbotModeDropdown,
         Hitbox = HitboxDropdown,
         Priority = PriorityDropdown,
-        FOV = FOVSlider,
         Smoothness = SmoothnessSlider,
         MaxDistance = MaxDistanceSlider,
         Prediction = PredictionSlider,
