@@ -246,23 +246,38 @@ if VALID_KEYS[userEnteredKey] then
     })
 
     -- // FOV Circle & Target Marker (Drawing API)
-    local FOVCircle = Drawing.new("Circle")
-    FOVCircle.Thickness = 1.5
-    FOVCircle.NumSides = 80
-    FOVCircle.Radius = FOVSlider.Value
-    FOVCircle.Filled = false
-    FOVCircle.Transparency = 0.7
-    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-    FOVCircle.Visible = false
+    local FOVCircle = nil
+    local fovOk, fovErr = pcall(function()
+        FOVCircle = Drawing.new("Circle")
+        FOVCircle.Thickness = 1.5
+        FOVCircle.NumSides = 64
+        FOVCircle.Radius = FOVSlider.Value
+        FOVCircle.Filled = false
+        FOVCircle.Transparency = 0.8
+        FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+        FOVCircle.Visible = false
+    end)
+    if not fovOk then
+        warn("[Pancake Hub] FOV Circle Drawing failed: " .. tostring(fovErr))
+        warn("[Pancake Hub] Your executor may not support Drawing.new('Circle')")
+    else
+        print("[Pancake Hub] FOV Circle created successfully")
+    end
 
-    local TargetMarker = Drawing.new("Circle")
-    TargetMarker.Thickness = 2
-    TargetMarker.NumSides = 40
-    TargetMarker.Radius = 8
-    TargetMarker.Filled = true
-    TargetMarker.Transparency = 0.8
-    TargetMarker.Color = Color3.fromRGB(255, 50, 50)
-    TargetMarker.Visible = false
+    local TargetMarker = nil
+    local tmOk, tmErr = pcall(function()
+        TargetMarker = Drawing.new("Circle")
+        TargetMarker.Thickness = 2
+        TargetMarker.NumSides = 40
+        TargetMarker.Radius = 8
+        TargetMarker.Filled = true
+        TargetMarker.Transparency = 0.8
+        TargetMarker.Color = Color3.fromRGB(255, 50, 50)
+        TargetMarker.Visible = false
+    end)
+    if not tmOk then
+        warn("[Pancake Hub] Target Marker Drawing failed: " .. tostring(tmErr))
+    end
 
     -- // Helpers
     local function GetCharacter(Player)
@@ -383,14 +398,16 @@ if VALID_KEYS[userEnteredKey] then
         local ViewportCenter = Camera.ViewportSize / 2
 
         -- Update FOV circle
-        FOVCircle.Position = ViewportCenter
-        FOVCircle.Radius = FOVSlider.Value
-        FOVCircle.Visible = ShowFOVToggle.Value
+        if FOVCircle then
+            FOVCircle.Position = ViewportCenter
+            FOVCircle.Radius = FOVSlider.Value
+            FOVCircle.Visible = ShowFOVToggle.Value
+        end
 
         if (not Active) then
             CurrentTarget = nil
             LockedPart = nil
-            TargetMarker.Visible = false
+            if TargetMarker then TargetMarker.Visible = false end
             return
         end
 
@@ -398,7 +415,7 @@ if VALID_KEYS[userEnteredKey] then
         if #list == 0 then
             CurrentTarget = nil
             LockedPart = nil
-            TargetMarker.Visible = false
+            if TargetMarker then TargetMarker.Visible = false end
             return
         end
 
@@ -406,7 +423,7 @@ if VALID_KEYS[userEnteredKey] then
         if not best then
             CurrentTarget = nil
             LockedPart = nil
-            TargetMarker.Visible = false
+            if TargetMarker then TargetMarker.Visible = false end
             return
         end
 
@@ -433,7 +450,7 @@ if VALID_KEYS[userEnteredKey] then
         end
 
         -- Target marker
-        if ShowTargetToggle.Value then
+        if TargetMarker and ShowTargetToggle.Value then
             local sp, OnScreen = Camera:WorldToScreenPoint(Point)
             if OnScreen then
                 TargetMarker.Position = Vector2.new(sp.X, sp.Y)
@@ -441,7 +458,7 @@ if VALID_KEYS[userEnteredKey] then
             else
                 TargetMarker.Visible = false
             end
-        else
+        elseif TargetMarker then
             TargetMarker.Visible = false
         end
     end)
@@ -967,7 +984,7 @@ if VALID_KEYS[userEnteredKey] then
                 if data.NameLabel then data.NameLabel.TextColor3 = preset end
                 if data.Highlight then data.Highlight.OutlineColor = preset end
             end
-            FOVCircle.Color = preset
+            if FOVCircle then FOVCircle.Color = preset end
         end
     end)
 
