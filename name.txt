@@ -150,10 +150,10 @@ if VALID_KEYS[userEnteredKey] then
 
     local AimbotModeDropdown = AimingGroup:AddDropdown("AimbotMode", {
         Text = "Aim Type",
-        Values = {"Camera", "Silent Aim"},
+        Values = {"Camera"},
         Default = 1,
         Multi = false,
-        Tooltip = "Camera = smooth rotate | Silent = hidden raycast",
+        Tooltip = "Camera-based aimbot (no hooks, undetectable)",
     })
 
     local HitboxDropdown = AimingGroup:AddDropdown("Hitbox", {
@@ -309,7 +309,6 @@ if VALID_KEYS[userEnteredKey] then
     -- // Target acquisition
     local CurrentTarget = nil
     local LockedPart = nil
-    local SilentAimPart = nil
 
     local function CollectTargets()
         local list = {}
@@ -374,29 +373,6 @@ if VALID_KEYS[userEnteredKey] then
         return list[1]
     end
 
-    -- // Silent aim hook
-    local OldNamecall
-
-    local function HookSilentAim()
-        if OldNamecall then return end
-        OldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            if method == "FireServer" and self.Name == "Shoot" then
-                if SilentAimPart and AimbotModeDropdown.Value == "Silent Aim" then
-                    local args = {...}
-                    local origin = Camera.CFrame.Position
-                    local target = SilentAimPart.Position
-                    local direction = (target - origin).Unit * 1000
-                    if args[2] then args[2] = direction end
-                    return self.FireServer(self, unpack(args))
-                end
-            end
-            return OldNamecall(self, ...)
-        end))
-    end
-
-    pcall(HookSilentAim)
-
     -- // Main aimbot loop
     RunService:UnbindFromRenderStep("BlockSpinLegitAim")
     RunService:BindToRenderStep("BlockSpinLegitAim", Enum.RenderPriority.Camera.Value + 1, function()
@@ -414,7 +390,6 @@ if VALID_KEYS[userEnteredKey] then
         if (not Active) then
             CurrentTarget = nil
             LockedPart = nil
-            SilentAimPart = nil
             TargetMarker.Visible = false
             return
         end
@@ -423,7 +398,6 @@ if VALID_KEYS[userEnteredKey] then
         if #list == 0 then
             CurrentTarget = nil
             LockedPart = nil
-            SilentAimPart = nil
             TargetMarker.Visible = false
             return
         end
@@ -432,14 +406,12 @@ if VALID_KEYS[userEnteredKey] then
         if not best then
             CurrentTarget = nil
             LockedPart = nil
-            SilentAimPart = nil
             TargetMarker.Visible = false
             return
         end
 
         CurrentTarget = best.Player
         LockedPart = best.Part
-        SilentAimPart = best.Part
 
         -- Prediction
         local Point = best.Part.Position
