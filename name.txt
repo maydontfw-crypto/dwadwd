@@ -379,10 +379,8 @@ if VALID_KEYS[userEnteredKey] then
         local MousePos = UserInputService:GetMouseLocation()
 
         -- Update FOV circle (follows mouse)
-        local fovRadius = FOVSlider.Value
-        local diameter = fovRadius * 2
-        FOVCircle.Size = UDim2.new(0, diameter, 0, diameter)
-        FOVCircle.Position = UDim2.new(0, MousePos.X, 0, MousePos.Y)
+        FOVCircle.Position = MousePos
+        FOVCircle.Radius = FOVSlider.Value
         FOVCircle.Visible = ShowFOVToggle.Value
 
         if (not Active) then
@@ -439,31 +437,14 @@ if VALID_KEYS[userEnteredKey] then
             else
     MarkerFrame.Visible = false
 
-    -- // FOV Circle (Instance-based — follows mouse cursor)
-    local FOVGui = Instance.new("ScreenGui")
-    FOVGui.Name = "PancakeFOV"
-    FOVGui.ResetOnSpawn = false
-    FOVGui.DisplayOrder = 998
-    FOVGui.Parent = game:GetService("CoreGui")
-
-    local FOVCircle = Instance.new("Frame")
-    FOVCircle.Name = "FOVCircle"
-    FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-    FOVCircle.BackgroundTransparency = 1
-    FOVCircle.BorderSizePixel = 0
-    FOVCircle.Parent = FOVGui
-
-    local FOVCircleCorner = Instance.new("UICorner")
-    FOVCircleCorner.CornerRadius = UDim.new(1, 0)
-    FOVCircleCorner.Parent = FOVCircle
-
-    local FOVCircleStroke = Instance.new("UIStroke")
-    FOVCircleStroke.Color = Color3.fromRGB(255, 255, 255)
-    FOVCircleStroke.Thickness = 1.5
-    FOVCircleStroke.Transparency = 0.3
-    FOVCircleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    FOVCircleStroke.Parent = FOVCircle
-
+    -- // FOV Circle (Drawing API — follows mouse cursor)
+    local FOVCircle = Drawing.new("Circle")
+    FOVCircle.Thickness = 1.5
+    FOVCircle.NumSides = 80
+    FOVCircle.Radius = FOVSlider.Value
+    FOVCircle.Filled = false
+    FOVCircle.Transparency = 0.7
+    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
     FOVCircle.Visible = false
             end
         else
@@ -992,7 +973,7 @@ if VALID_KEYS[userEnteredKey] then
                 if data.NameLabel then data.NameLabel.TextColor3 = preset end
                 if data.Highlight then data.Highlight.OutlineColor = preset end
             end
-            FOVCircleStroke.Color = preset
+            FOVCircle.Color = preset
         end
     end)
 
