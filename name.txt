@@ -134,84 +134,50 @@ if VALID_KEYS[userEnteredKey] then
     local EnabledKey = EnabledToggle.Addons[1]
 
     local FOVSlider = AimingGroup:AddSlider("FOV", {
-        Text = "FOV",
-        Default = 90,
-        Min = 5,
-        Max = 200,
-        Suffix = "px",
-        Rounding = 1,
-        Tooltip = "Only targets inside this distance from the crosshair get locked",
+        Text = "FOV", Default = 90, Min = 5, Max = 200,
+        Suffix = "px", Rounding = 1,
     })
 
     local HitboxDropdown = AimingGroup:AddDropdown("Hitbox", {
         Text = "Hitbox",
         Values = {"Head", "HumanoidRootPart", "Torso"},
-        Default = 1,
-        Multi = false,
-        Tooltip = "Which body part to aim at",
+        Default = 1, Multi = false,
     })
-    HitboxDropdown:OnChanged(function()
-        HitboxDropdown:CloseDropdown()
-    end)
+    HitboxDropdown:OnChanged(function() HitboxDropdown:CloseDropdown() end)
 
     local SmoothnessSlider = AimingGroup:AddSlider("Smoothness", {
-        Text = "Smoothness",
-        Default = 60,
-        Min = 0,
-        Max = 100,
-        Suffix = "%",
-        Rounding = 1,
-        Tooltip = "Higher = faster lock-on. 100% = instant snap",
+        Text = "Smoothness", Default = 60, Min = 0, Max = 100,
+        Suffix = "%", Rounding = 1,
     })
 
     local MaxDistanceSlider = AimingGroup:AddSlider("MaxDistance", {
-        Text = "Max Distance",
-        Default = 200,
-        Min = 5,
-        Max = 1500,
-        Suffix = " studs",
-        Rounding = 1,
-        Tooltip = "Maximum range to look for targets",
+        Text = "Max Distance", Default = 200, Min = 5, Max = 1500,
+        Suffix = " studs", Rounding = 1,
     })
 
     local PredictionSlider = AimingGroup:AddSlider("Prediction", {
-        Text = "Prediction",
-        Default = 0,
-        Min = 0,
-        Max = 1,
-        Rounding = 2,
-        Tooltip = "Leads moving targets (0 = none)",
+        Text = "Prediction", Default = 0, Min = 0, Max = 1, Rounding = 2,
     })
 
     local ExtrasGroup = Tabs.Aiming:AddRightGroupbox("Extras")
 
     local TeamCheckToggle = ExtrasGroup:AddToggle("TeamCheck", {
-        Text = "Ignore Teammates",
-        Default = true,
-        Tooltip = "Do not aim at players on your team",
+        Text = "Ignore Teammates", Default = true,
     })
 
     local WallCheckToggle = ExtrasGroup:AddToggle("WallCheck", {
-        Text = "Wall Check",
-        Default = true,
-        Tooltip = "Skip targets that are behind walls",
+        Text = "Wall Check", Default = true,
     })
 
     local PriorityDropdown = ExtrasGroup:AddDropdown("Priority", {
         Text = "Target Priority",
         Values = {"Closest to Crosshair", "Lowest HP", "Nearest Distance"},
-        Default = 1,
-        Multi = false,
-        Tooltip = "How to pick the best target",
+        Default = 1, Multi = false,
     })
-    PriorityDropdown:OnChanged(function()
-        PriorityDropdown:CloseDropdown()
-    end)
+    PriorityDropdown:OnChanged(function() PriorityDropdown:CloseDropdown() end)
 
     local SilentAimToggle = ExtrasGroup:AddToggle("SilentAim", {
-        Text = "Silent Aim",
-        Default = false,
-        Tooltip = "Redirect bullets toward the target (hooks raycasts)",
+        Text = "Silent Aim", Default = false,
     })
 
     local function GetCharacter(Player)
@@ -219,9 +185,7 @@ if VALID_KEYS[userEnteredKey] then
     end
 
     local function IsAlive(Character)
-        if (not Character) then
-            return false
-        end
+        if (not Character) then return false end
         local Humanoid = Character:FindFirstChildOfClass("Humanoid")
         local RootPart = Character:FindFirstChild("HumanoidRootPart")
         return Humanoid and RootPart and Humanoid.Health > 0
@@ -270,8 +234,7 @@ if VALID_KEYS[userEnteredKey] then
 
             local Humanoid = Character:FindFirstChildOfClass("Humanoid")
             table.insert(Candidates, {
-                Player = Player,
-                Part = Part,
+                Player = Player, Part = Part,
                 ScreenDistance = ScreenDistance,
                 Range = Range,
                 Health = Humanoid and Humanoid.Health or math.huge,
@@ -358,47 +321,24 @@ if VALID_KEYS[userEnteredKey] then
     local ESPTab = Tabs.ESP
     local ESPGroup = ESPTab:AddLeftGroupbox("ESP")
 
-    local ESPToggle = ESPGroup:AddToggle("ESPEnabled", {
-        Text = "Enabled", Default = true,
-    })
-    local ESPBoxesToggle = ESPGroup:AddToggle("ESPBoxes", {
-        Text = "Boxes", Default = true,
-    })
+    local ESPToggle = ESPGroup:AddToggle("ESPEnabled", { Text = "Enabled", Default = true })
+    local ESPBoxesToggle = ESPGroup:AddToggle("ESPBoxes", { Text = "Boxes", Default = true })
     local ESPBoxStyleDropdown = ESPGroup:AddDropdown("ESPBoxStyle", {
-        Text = "Box Style",
-        Values = {"2D Box", "Corner Box"},
-        Default = 1, Multi = false,
+        Text = "Box Style", Values = {"2D Box", "Corner Box"}, Default = 1, Multi = false,
     })
     ESPBoxStyleDropdown:OnChanged(function() ESPBoxStyleDropdown:CloseDropdown() end)
 
-    local ESPNameToggle = ESPGroup:AddToggle("ESPName", {
-        Text = "Names", Default = true,
-    })
-    local ESPHealthToggle = ESPGroup:AddToggle("ESPHealth", {
-        Text = "Health Bar", Default = true,
-    })
-    local ESPHealthTextToggle = ESPGroup:AddToggle("ESPHealthText", {
-        Text = "Health Text", Default = true,
-    })
-    local ESPTracerToggle = ESPGroup:AddToggle("ESPTracers", {
-        Text = "Tracers", Default = false,
-    })
-    local ESPTeamCheckToggle = ESPGroup:AddToggle("ESPTeamCheck", {
-        Text = "Ignore Teammates", Default = true,
-    })
+    local ESPNameToggle = ESPGroup:AddToggle("ESPName", { Text = "Names", Default = true })
+    local ESPHealthToggle = ESPGroup:AddToggle("ESPHealth", { Text = "Health Bar", Default = true })
+    local ESPHealthTextToggle = ESPGroup:AddToggle("ESPHealthText", { Text = "Health Text", Default = true })
+    local ESPTracerToggle = ESPGroup:AddToggle("ESPTracers", { Text = "Tracers", Default = false })
+    local ESPTeamCheckToggle = ESPGroup:AddToggle("ESPTeamCheck", { Text = "Ignore Teammates", Default = true })
     local ESPDistanceSlider = ESPGroup:AddSlider("ESPDistance", {
-        Text = "Max Distance", Default = 200, Min = 5, Max = 1500,
-        Suffix = " studs", Rounding = 1,
+        Text = "Max Distance", Default = 200, Min = 5, Max = 1500, Suffix = " studs", Rounding = 1,
     })
-    local ESPColorPicker = ESPGroup:AddColorPicker("ESPColor", {
-        Text = "ESP Color", Default = Color3.fromRGB(255, 60, 60),
-    })
-    local ESPChamsToggle = ESPGroup:AddToggle("ESPChams", {
-        Text = "Chams", Default = false,
-    })
-    local ESPChamsColorPicker = ESPGroup:AddColorPicker("ESPChamsColor", {
-        Text = "Chams Color", Default = Color3.fromRGB(255, 60, 60),
-    })
+    local ESPColorPicker = ESPGroup:AddColorPicker("ESPColor", { Text = "ESP Color", Default = Color3.fromRGB(255, 60, 60) })
+    local ESPChamsToggle = ESPGroup:AddToggle("ESPChams", { Text = "Chams", Default = false })
+    local ESPChamsColorPicker = ESPGroup:AddColorPicker("ESPChamsColor", { Text = "Chams Color", Default = Color3.fromRGB(255, 60, 60) })
 
     local ESPCache = {}
     local SmoothCache = {}
@@ -444,12 +384,9 @@ if VALID_KEYS[userEnteredKey] then
         local Entry = ESPCache[Player]
         if (not Entry) then
             Entry = {
-                Box = Drawing.new("Square"),
-                Name = Drawing.new("Text"),
-                Health = Drawing.new("Text"),
-                HealthBar = Drawing.new("Line"),
-                HealthBarBg = Drawing.new("Line"),
-                Tracer = Drawing.new("Line"),
+                Box = Drawing.new("Square"), Name = Drawing.new("Text"),
+                Health = Drawing.new("Text"), HealthBar = Drawing.new("Line"),
+                HealthBarBg = Drawing.new("Line"), Tracer = Drawing.new("Line"),
                 CornerLines = {},
             }
             for i = 1, 8 do
@@ -457,37 +394,26 @@ if VALID_KEYS[userEnteredKey] then
                 Entry.CornerLines[i].Thickness = 2
                 Entry.CornerLines[i].Transparency = 1
             end
-            Entry.Box.Thickness = 1
-            Entry.Box.Transparency = 1
+            Entry.Box.Thickness = 1; Entry.Box.Transparency = 1
             Entry.Box.Color = Color3.fromRGB(255, 60, 60)
-            Entry.Name.Center = true
-            Entry.Name.Outline = true
-            Entry.Name.OutlineColor = Color3.new(0, 0, 0)
-            Entry.Name.Size = 13
-            Entry.Health.Center = true
-            Entry.Health.Outline = true
-            Entry.Health.OutlineColor = Color3.new(0, 0, 0)
-            Entry.Health.Size = 12
-            Entry.HealthBar.Thickness = 3
-            Entry.HealthBar.Transparency = 1
-            Entry.HealthBarBg.Thickness = 3
-            Entry.HealthBarBg.Transparency = 0.5
+            Entry.Name.Center = true; Entry.Name.Outline = true
+            Entry.Name.OutlineColor = Color3.new(0, 0, 0); Entry.Name.Size = 13
+            Entry.Health.Center = true; Entry.Health.Outline = true
+            Entry.Health.OutlineColor = Color3.new(0, 0, 0); Entry.Health.Size = 12
+            Entry.HealthBar.Thickness = 3; Entry.HealthBar.Transparency = 1
+            Entry.HealthBarBg.Thickness = 3; Entry.HealthBarBg.Transparency = 0.5
             Entry.HealthBarBg.Color = Color3.new(0, 0, 0)
-            Entry.Tracer.Thickness = 1
-            Entry.Tracer.Transparency = 0.7
+            Entry.Tracer.Thickness = 1; Entry.Tracer.Transparency = 0.7
             ESPCache[Player] = Entry
         end
         if (not SmoothCache[Player]) then
             SmoothCache[Player] = {X = 0, Y = 0, W = 0, H = 0}
         end
-        if (ESPChamsToggle.Value) then
-            if (not ChamCache[Player]) then
-                local Highlight = Instance.new("Highlight")
-                Highlight.FillTransparency = 0.6
-                Highlight.OutlineTransparency = 0.2
-                Highlight.Parent = Workspace.Terrain
-                ChamCache[Player] = Highlight
-            end
+        if (ESPChamsToggle.Value and not ChamCache[Player]) then
+            local Highlight = Instance.new("Highlight")
+            Highlight.FillTransparency = 0.6; Highlight.OutlineTransparency = 0.2
+            Highlight.Parent = Workspace.Terrain
+            ChamCache[Player] = Highlight
         end
         return Entry
     end
@@ -495,12 +421,8 @@ if VALID_KEYS[userEnteredKey] then
     local function CleanupPlayer(Player)
         local Entry = ESPCache[Player]
         if (Entry) then
-            Entry.Box:Remove()
-            Entry.Name:Remove()
-            Entry.Health:Remove()
-            Entry.HealthBar:Remove()
-            Entry.HealthBarBg:Remove()
-            Entry.Tracer:Remove()
+            Entry.Box:Remove(); Entry.Name:Remove(); Entry.Health:Remove()
+            Entry.HealthBar:Remove(); Entry.HealthBarBg:Remove(); Entry.Tracer:Remove()
             for i = 1, 8 do Entry.CornerLines[i]:Remove() end
             ESPCache[Player] = nil
         end
@@ -521,12 +443,9 @@ if VALID_KEYS[userEnteredKey] then
             if (Player == LocalPlayer) then
                 local SelfEntry = ESPCache[Player]
                 if (SelfEntry) then
-                    SelfEntry.Box.Visible = false
-                    SelfEntry.Name.Visible = false
-                    SelfEntry.Health.Visible = false
-                    SelfEntry.HealthBar.Visible = false
-                    SelfEntry.HealthBarBg.Visible = false
-                    SelfEntry.Tracer.Visible = false
+                    SelfEntry.Box.Visible = false; SelfEntry.Name.Visible = false
+                    SelfEntry.Health.Visible = false; SelfEntry.HealthBar.Visible = false
+                    SelfEntry.HealthBarBg.Visible = false; SelfEntry.Tracer.Visible = false
                     HideCornerBox(SelfEntry)
                 end
                 continue
@@ -556,13 +475,13 @@ if VALID_KEYS[userEnteredKey] then
                             local TargetBoxW = TargetBoxH * 0.6
                             local TargetCenterX = (ScreenTop.X + ScreenFeet.X) / 2
 
-                            local Smooth = SmoothCache[Player]
-                            Smooth.X = Smooth.X + (TargetCenterX - TargetBoxW / 2 - Smooth.X) * SmoothFactor
-                            Smooth.Y = Smooth.Y + (TargetTopY - Smooth.Y) * SmoothFactor
-                            Smooth.W = Smooth.W + (TargetBoxW - Smooth.W) * SmoothFactor
-                            Smooth.H = Smooth.H + (TargetBoxH - Smooth.H) * SmoothFactor
+                            local Sm = SmoothCache[Player]
+                            Sm.X = Sm.X + (TargetCenterX - TargetBoxW / 2 - Sm.X) * SmoothFactor
+                            Sm.Y = Sm.Y + (TargetTopY - Sm.Y) * SmoothFactor
+                            Sm.W = Sm.W + (TargetBoxW - Sm.W) * SmoothFactor
+                            Sm.H = Sm.H + (TargetBoxH - Sm.H) * SmoothFactor
 
-                            local X, Y, W, H = Smooth.X, Smooth.Y, Smooth.W, Smooth.H
+                            local X, Y, W, H = Sm.X, Sm.Y, Sm.W, Sm.H
                             local Cx = X + W / 2
                             local Color = IsTeammate and Color3.fromRGB(60, 255, 60) or ESPColorPicker.Value
 
@@ -572,19 +491,16 @@ if VALID_KEYS[userEnteredKey] then
                                     DrawCornerBox(Entry, X, Y, W, H, Color)
                                 else
                                     HideCornerBox(Entry)
-                                    Entry.Box.Visible = true
-                                    Entry.Box.Color = Color
+                                    Entry.Box.Visible = true; Entry.Box.Color = Color
                                     Entry.Box.Position = Vector2.new(X, Y)
                                     Entry.Box.Size = Vector2.new(W, H)
                                 end
                             else
-                                Entry.Box.Visible = false
-                                HideCornerBox(Entry)
+                                Entry.Box.Visible = false; HideCornerBox(Entry)
                             end
 
                             if (ESPNameToggle.Value) then
-                                Entry.Name.Visible = true
-                                Entry.Name.Text = Player.Name
+                                Entry.Name.Visible = true; Entry.Name.Text = Player.Name
                                 Entry.Name.Color = Color
                                 Entry.Name.Position = Vector2.new(Cx, Y - 15)
                             else
@@ -593,8 +509,7 @@ if VALID_KEYS[userEnteredKey] then
 
                             if (ESPHealthBar.Value) then
                                 local HealthPct = math.clamp(Humanoid.Health / Humanoid.MaxHealth, 0, 1)
-                                local BarH = H * HealthPct
-                                local BarX = X - 4
+                                local BarH = H * HealthPct; local BarX = X - 4
                                 Entry.HealthBarBg.Visible = true
                                 Entry.HealthBarBg.From = Vector2.new(BarX, Y)
                                 Entry.HealthBarBg.To = Vector2.new(BarX, Y + H)
@@ -603,8 +518,7 @@ if VALID_KEYS[userEnteredKey] then
                                 Entry.HealthBar.To = Vector2.new(BarX, Y + H)
                                 Entry.HealthBar.Color = GetHealthColor(HealthPct)
                             else
-                                Entry.HealthBar.Visible = false
-                                Entry.HealthBarBg.Visible = false
+                                Entry.HealthBar.Visible = false; Entry.HealthBarBg.Visible = false
                             end
 
                             if (ESPHealthTextToggle.Value) then
@@ -635,47 +549,36 @@ if VALID_KEYS[userEnteredKey] then
                 if (Cham) then
                     Cham.FillColor = ESPChamsColorPicker.Value
                     Cham.OutlineColor = ESPChamsColorPicker.Value
-                    Cham.Adornee = Player.Character
-                    Cham.Enabled = true
+                    Cham.Adornee = Player.Character; Cham.Enabled = true
                 end
             else
                 local Cham = ChamCache[Player]
-                if (Cham) then Cham.Enabled = false Cham.Adornee = nil end
+                if (Cham) then Cham.Enabled = false; Cham.Adornee = nil end
             end
 
             if (not Show) then
-                Entry.Box.Visible = false
-                Entry.Name.Visible = false
-                Entry.Health.Visible = false
-                Entry.HealthBar.Visible = false
-                Entry.HealthBarBg.Visible = false
-                Entry.Tracer.Visible = false
+                Entry.Box.Visible = false; Entry.Name.Visible = false
+                Entry.Health.Visible = false; Entry.HealthBar.Visible = false
+                Entry.HealthBarBg.Visible = false; Entry.Tracer.Visible = false
                 HideCornerBox(Entry)
             end
         end
     end)
     local ESPExtrasGroup = ESPTab:AddRightGroupbox("Extras")
 
-    local CarPVPToggle = ESPExtrasGroup:AddToggle("CarPVP", {
-        Text = "Car PVP", Default = false,
-    })
-
+    local CarPVPToggle = ESPExtrasGroup:AddToggle("CarPVP", { Text = "Car PVP", Default = false })
     local CarPVPConnection = nil
 
     local function StartCarPVP()
         local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
         local Humanoid = Character:WaitForChild("Humanoid")
-        Camera.CameraType = Enum.CameraType.Custom
-        Camera.CameraSubject = Humanoid
+        Camera.CameraType = Enum.CameraType.Custom; Camera.CameraSubject = Humanoid
         if (CarPVPConnection) then CarPVPConnection:Disconnect() end
         CarPVPConnection = RunService.RenderStepped:Connect(function()
             if (not CarPVPToggle.Value) then return end
             local Char = LocalPlayer.Character
             local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
-            if (Hum) then
-                Camera.CameraType = Enum.CameraType.Custom
-                Camera.CameraSubject = Hum
-            end
+            if (Hum) then Camera.CameraType = Enum.CameraType.Custom; Camera.CameraSubject = Hum end
         end)
     end
 
@@ -683,68 +586,43 @@ if VALID_KEYS[userEnteredKey] then
         if (CarPVPConnection) then CarPVPConnection:Disconnect() CarPVPConnection = nil end
         local Character = LocalPlayer.Character
         local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
-        if (Humanoid) then
-            Camera.CameraType = Enum.CameraType.Custom
-            Camera.CameraSubject = Humanoid
-        end
+        if (Humanoid) then Camera.CameraType = Enum.CameraType.Custom; Camera.CameraSubject = Humanoid end
     end
 
-    CarPVPToggle:OnChanged(function(Value)
-        if (Value) then StartCarPVP() else StopCarPVP() end
-    end)
+    CarPVPToggle:OnChanged(function(Value) if (Value) then StartCarPVP() else StopCarPVP() end end)
 
     local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
     local HudGui = Instance.new("ScreenGui")
-    HudGui.Name = "InventoryHudGui"
-    HudGui.ResetOnSpawn = false
-    HudGui.Parent = PlayerGui
+    HudGui.Name = "InventoryHudGui"; HudGui.ResetOnSpawn = false; HudGui.Parent = PlayerGui
 
     local HudFrame = Instance.new("Frame")
-    HudFrame.Name = "HudFrame"
-    HudFrame.Size = UDim2.new(0, 220, 0, 300)
-    HudFrame.Position = UDim2.new(0, 15, 0.3, 0)
-    HudFrame.BackgroundTransparency = 1
-    HudFrame.BorderSizePixel = 0
-    HudFrame.Visible = false
-    HudFrame.Parent = HudGui
+    HudFrame.Name = "HudFrame"; HudFrame.Size = UDim2.new(0, 220, 0, 300)
+    HudFrame.Position = UDim2.new(0, 15, 0.3, 0); HudFrame.BackgroundTransparency = 1
+    HudFrame.BorderSizePixel = 0; HudFrame.Visible = false; HudFrame.Parent = HudGui
 
     local HudTitle = Instance.new("TextLabel")
-    HudTitle.Size = UDim2.new(1, 0, 0, 30)
-    HudTitle.BackgroundTransparency = 1
-    HudTitle.Text = "Inventory Checker"
-    HudTitle.TextColor3 = Color3.fromRGB(228, 228, 231)
-    HudTitle.TextSize = 14
-    HudTitle.Font = Enum.Font.SourceSansBold
-    HudTitle.TextXAlignment = Enum.TextXAlignment.Left
-    HudTitle.Parent = HudFrame
+    HudTitle.Size = UDim2.new(1, 0, 0, 30); HudTitle.BackgroundTransparency = 1
+    HudTitle.Text = "Inventory Checker"; HudTitle.TextColor3 = Color3.fromRGB(228, 228, 231)
+    HudTitle.TextSize = 14; HudTitle.Font = Enum.Font.SourceSansBold
+    HudTitle.TextXAlignment = Enum.TextXAlignment.Left; HudTitle.Parent = HudFrame
 
     local HudScroll = Instance.new("ScrollingFrame")
-    HudScroll.Size = UDim2.new(1, 0, 1, -30)
-    HudScroll.Position = UDim2.new(0, 0, 0, 30)
-    HudScroll.BackgroundTransparency = 1
-    HudScroll.BorderSizePixel = 0
-    HudScroll.ScrollBarThickness = 2
-    HudScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    HudScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    HudScroll.Parent = HudFrame
+    HudScroll.Size = UDim2.new(1, 0, 1, -30); HudScroll.Position = UDim2.new(0, 0, 0, 30)
+    HudScroll.BackgroundTransparency = 1; HudScroll.BorderSizePixel = 0
+    HudScroll.ScrollBarThickness = 2; HudScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    HudScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; HudScroll.Parent = HudFrame
 
     local HudTextLabel = Instance.new("TextLabel")
-    HudTextLabel.Size = UDim2.new(1, 0, 0, 0)
-    HudTextLabel.AutomaticSize = Enum.AutomaticSize.Y
-    HudTextLabel.BackgroundTransparency = 1
-    HudTextLabel.Text = "Scanning inventories..."
-    HudTextLabel.TextColor3 = Color3.fromRGB(212, 212, 216)
-    HudTextLabel.TextSize = 13
-    HudTextLabel.Font = Enum.Font.SourceSansBold
-    HudTextLabel.TextXAlignment = Enum.TextXAlignment.Left
-    HudTextLabel.TextYAlignment = Enum.TextYAlignment.Top
-    HudTextLabel.TextWrapped = true
+    HudTextLabel.Size = UDim2.new(1, 0, 0, 0); HudTextLabel.AutomaticSize = Enum.AutomaticSize.Y
+    HudTextLabel.BackgroundTransparency = 1; HudTextLabel.Text = "Scanning inventories..."
+    HudTextLabel.TextColor3 = Color3.fromRGB(212, 212, 216); HudTextLabel.TextSize = 13
+    HudTextLabel.Font = Enum.Font.SourceSansBold; HudTextLabel.TextXAlignment = Enum.TextXAlignment.Left
+    HudTextLabel.TextYAlignment = Enum.TextYAlignment.Top; HudTextLabel.TextWrapped = true
     HudTextLabel.Parent = HudScroll
 
     local InvCheckerToggle = ESPExtrasGroup:AddToggle("InventoryChecker", {
-        Text = "Inventory Checker HUD",
-        Default = false,
+        Text = "Inventory Checker HUD", Default = false,
         Callback = function(Value) HudFrame.Visible = Value end,
     })
 
@@ -789,76 +667,35 @@ if VALID_KEYS[userEnteredKey] then
                     for _, instance in ipairs(Players:GetChildren()) do
                         if not instance:IsA("Player") then continue end
                         local pObj = instance
-                        local pName = pObj.Name
-                        local SETITEMS = {}
-                        local ITEMTODISPLAY = {}
-                        local ITEMCHECK = {}
-
+                        local SETITEMS = {}; local ITEMTODISPLAY = {}; local ITEMCHECK = {}
                         local backpack = pObj:FindFirstChild("Backpack")
-                        if backpack then
-                            for _, tool in ipairs(backpack:GetChildren()) do
-                                if tool:IsA("Tool") then table.insert(ITEMCHECK, tool) end
-                            end
-                        end
+                        if backpack then for _, tool in ipairs(backpack:GetChildren()) do if tool:IsA("Tool") then table.insert(ITEMCHECK, tool) end end end
                         local character = pObj.Character
-                        if character then
-                            for _, child in ipairs(character:GetChildren()) do
-                                if child:IsA("Tool") then table.insert(ITEMCHECK, child) end
-                            end
-                        end
-
+                        if character then for _, child in ipairs(character:GetChildren()) do if child:IsA("Tool") then table.insert(ITEMCHECK, child) end end end
                         for _, tool in ipairs(ITEMCHECK) do
                             local identified = false
                             for _, part in ipairs(tool:GetChildren()) do
-                                local partName = part.Name
-                                local prefix = "Meshes/"
+                                local partName = part.Name; local prefix = "Meshes/"
                                 if string.sub(partName, 1, #prefix) == prefix then
                                     local subName = string.lower(string.sub(partName, #prefix + 1))
                                     for _, entry in ipairs(ITEM_DATABASE) do
-                                        local pattern = string.lower(entry.meshPattern)
-                                        local matched = false
-                                        if entry.isPrefix then
-                                            if string.sub(subName, 1, #pattern) == pattern then matched = true end
-                                        else
-                                            if subName == pattern then matched = true end
-                                        end
+                                        local pattern = string.lower(entry.meshPattern); local matched = false
+                                        if entry.isPrefix then if string.sub(subName, 1, #pattern) == pattern then matched = true end
+                                        else if subName == pattern then matched = true end end
                                         if matched then
-                                            if not SETITEMS[entry.displayName] then
-                                                SETITEMS[entry.displayName] = true
-                                                table.insert(ITEMTODISPLAY, "- " .. entry.displayName)
-                                            end
-                                            identified = true
-                                            break
+                                            if not SETITEMS[entry.displayName] then SETITEMS[entry.displayName] = true; table.insert(ITEMTODISPLAY, "- " .. entry.displayName) end
+                                            identified = true; break
                                         end
                                     end
-                                elseif partName == "Butt" then
-                                    if not SETITEMS["Axe"] then
-                                        SETITEMS["Axe"] = true
-                                        table.insert(ITEMTODISPLAY, "- Axe")
-                                    end
-                                    identified = true
-                                elseif partName == "Bat" then
-                                    if not SETITEMS["Bat"] then
-                                        SETITEMS["Bat"] = true
-                                        table.insert(ITEMTODISPLAY, "- Bat")
-                                    end
-                                    identified = true
-                                end
+                                elseif partName == "Butt" then if not SETITEMS["Axe"] then SETITEMS["Axe"] = true; table.insert(ITEMTODISPLAY, "- Axe") end; identified = true
+                                elseif partName == "Bat" then if not SETITEMS["Bat"] then SETITEMS["Bat"] = true; table.insert(ITEMTODISPLAY, "- Bat") end; identified = true end
                                 if identified then break end
                             end
                         end
-
-                        if #ITEMTODISPLAY > 0 then
-                            table.insert(DISPLAYENTRIES, pName .. ":\n" .. table.concat(ITEMTODISPLAY, "\n"))
-                        end
+                        if #ITEMTODISPLAY > 0 then table.insert(DISPLAYENTRIES, pObj.Name .. ":\n" .. table.concat(ITEMTODISPLAY, "\n")) end
                     end
-
                     local resultStr = table.concat(DISPLAYENTRIES, "\n\n")
-                    if resultStr == "" then
-                        HudTextLabel.Text = "No player inventories detected."
-                    else
-                        HudTextLabel.Text = resultStr
-                    end
+                    HudTextLabel.Text = resultStr ~= "" and resultStr or "No player inventories detected."
                 end
             end)
             task.wait(0.5)
@@ -868,38 +705,34 @@ if VALID_KEYS[userEnteredKey] then
     local UISettingsGroup = Tabs["UI Settings"]:AddLeftGroupbox("UI")
 
     local ShowUIToggle = UISettingsGroup:AddToggle("ShowUI", {
-        Text = "Show UI",
-        Default = true,
+        Text = "Show UI", Default = true,
         Callback = function(Value) Window.Holder.Visible = Value end,
     })
     ShowUIToggle:AddKeyPicker("ShowUIKey", {
-        Text = "UI Toggle Key",
-        Default = Enum.KeyCode.RightShift,
-        SyncToggleState = true,
-        Mode = "Toggle",
-        Modes = {"Toggle"},
+        Text = "UI Toggle Key", Default = Enum.KeyCode.RightShift,
+        SyncToggleState = true, Mode = "Toggle", Modes = {"Toggle"},
         IgnoreProcessedCheck = true,
     })
 
     local PanicKeyGroup = Tabs["UI Settings"]:AddLeftGroupbox("Safety")
 
-    local PanicKeyBind = PanicKeyGroup:AddKeyPicker("PanicKeyBind", {
-        Text = "Panic Key",
-        Default = Enum.KeyCode.End,
-        Mode = "Toggle",
-        Modes = {"Toggle"},
+    local PanicKeyToggle = PanicKeyGroup:AddToggle("PanicKey", {
+        Text = "Panic Key Enabled", Default = false,
+        Tooltip = "Hold the panic key (End) to disable all features",
+    })
+    PanicKeyToggle:AddKeyPicker("PanicKeyBind", {
+        Text = "Panic Key", Default = Enum.KeyCode.End,
+        SyncToggleState = false, Mode = "Hold", Modes = {"Hold"},
         IgnoreProcessedCheck = true,
     })
+    local PanicKeyBind = PanicKeyToggle.Addons[1]
 
     PanicKeyGroup:AddButton({
         Text = "PANIC - Disable All",
         Func = function()
-            EnabledToggle:SetValue(false)
-            ESPToggle:SetValue(false)
-            SilentAimToggle:SetValue(false)
-            CarPVPToggle:SetValue(false)
-            InvCheckerToggle:SetValue(false)
-            ESPChamsToggle:SetValue(false)
+            EnabledToggle:SetValue(false); ESPToggle:SetValue(false)
+            SilentAimToggle:SetValue(false); CarPVPToggle:SetValue(false)
+            InvCheckerToggle:SetValue(false); ESPChamsToggle:SetValue(false)
             Library:Notify("PANIC: All features disabled", 3)
         end,
     })
@@ -907,41 +740,24 @@ if VALID_KEYS[userEnteredKey] then
     task.spawn(function()
         while task.wait(0.1) do
             if (PanicKeyBind:GetState()) then
-                EnabledToggle:SetValue(false)
-                ESPToggle:SetValue(false)
-                SilentAimToggle:SetValue(false)
-                CarPVPToggle:SetValue(false)
-                InvCheckerToggle:SetValue(false)
-                ESPChamsToggle:SetValue(false)
+                EnabledToggle:SetValue(false); ESPToggle:SetValue(false)
+                SilentAimToggle:SetValue(false); CarPVPToggle:SetValue(false)
+                InvCheckerToggle:SetValue(false); ESPChamsToggle:SetValue(false)
             end
         end
     end)
     local ThemeGroup = Tabs["UI Settings"]:AddRightGroupbox("Theme")
     local ThemeColorPickers = {}
 
-    local BGColorPicker = ThemeGroup:AddColorPicker("BackgroundColor", {
-        Text = "Background Color", Default = Library.BackgroundColor,
-    })
+    local BGColorPicker = ThemeGroup:AddColorPicker("BackgroundColor", { Text = "Background Color", Default = Library.BackgroundColor })
     ThemeColorPickers.BackgroundColor = BGColorPicker
-
-    local MainColorPicker = ThemeGroup:AddColorPicker("MainColor", {
-        Text = "Main Color", Default = Library.MainColor,
-    })
+    local MainColorPicker = ThemeGroup:AddColorPicker("MainColor", { Text = "Main Color", Default = Library.MainColor })
     ThemeColorPickers.MainColor = MainColorPicker
-
-    local AccentColorPicker = ThemeGroup:AddColorPicker("AccentColor", {
-        Text = "Accent Color", Default = Library.AccentColor,
-    })
+    local AccentColorPicker = ThemeGroup:AddColorPicker("AccentColor", { Text = "Accent Color", Default = Library.AccentColor })
     ThemeColorPickers.AccentColor = AccentColorPicker
-
-    local OutlineColorPicker = ThemeGroup:AddColorPicker("OutlineColor", {
-        Text = "Outline Color", Default = Library.OutlineColor,
-    })
+    local OutlineColorPicker = ThemeGroup:AddColorPicker("OutlineColor", { Text = "Outline Color", Default = Library.OutlineColor })
     ThemeColorPickers.OutlineColor = OutlineColorPicker
-
-    local FontColorPicker = ThemeGroup:AddColorPicker("FontColor", {
-        Text = "Font Color", Default = Library.FontColor,
-    })
+    local FontColorPicker = ThemeGroup:AddColorPicker("FontColor", { Text = "Font Color", Default = Library.FontColor })
     ThemeColorPickers.FontColor = FontColorPicker
 
     local function ApplyTheme()
@@ -962,56 +778,31 @@ if VALID_KEYS[userEnteredKey] then
 
     local HttpService = game:GetService("HttpService")
     local CONFIG_FOLDER = "BlockSpinLegit/Configs/settings"
-
     for _, Folder in ipairs({ "BlockSpinLegit", "BlockSpinLegit/Configs", CONFIG_FOLDER }) do
         if not isfolder(Folder) then makefolder(Folder) end
     end
 
     local SaveToggles = {
-        Enabled = EnabledToggle,
-        TeamCheck = TeamCheckToggle,
-        WallCheck = WallCheckToggle,
-        SilentAim = SilentAimToggle,
-        ESPEnabled = ESPToggle,
-        ESPBoxes = ESPBoxesToggle,
-        ESPName = ESPNameToggle,
-        ESPHealth = ESPHealthToggle,
-        ESPHealthText = ESPHealthTextToggle,
-        ESPTracers = ESPTracerToggle,
-        ESPTeamCheck = ESPTeamCheckToggle,
-        ESPChams = ESPChamsToggle,
-        CarPVP = CarPVPToggle,
-        InventoryChecker = InvCheckerToggle,
+        Enabled = EnabledToggle, TeamCheck = TeamCheckToggle, WallCheck = WallCheckToggle,
+        SilentAim = SilentAimToggle, ESPEnabled = ESPToggle, ESPBoxes = ESPBoxesToggle,
+        ESPName = ESPNameToggle, ESPHealth = ESPHealthToggle, ESPHealthText = ESPHealthTextToggle,
+        ESPTracers = ESPTracerToggle, ESPTeamCheck = ESPTeamCheckToggle, ESPChams = ESPChamsToggle,
+        CarPVP = CarPVPToggle, InventoryChecker = InvCheckerToggle,
     }
 
     local SaveOptions = {
-        EnabledKey = EnabledKey,
-        FOV = FOVSlider,
-        Hitbox = HitboxDropdown,
-        Smoothness = SmoothnessSlider,
-        MaxDistance = MaxDistanceSlider,
-        Prediction = PredictionSlider,
-        Priority = PriorityDropdown,
-        ESPBoxStyle = ESPBoxStyleDropdown,
-        ESPDistance = ESPDistanceSlider,
-        ESPColor = ESPColorPicker,
-        ESPChamsColor = ESPChamsColorPicker,
-        BackgroundColor = BGColorPicker,
-        MainColor = MainColorPicker,
-        AccentColor = AccentColorPicker,
-        OutlineColor = OutlineColorPicker,
-        FontColor = FontColorPicker,
+        EnabledKey = EnabledKey, FOV = FOVSlider, Hitbox = HitboxDropdown,
+        Smoothness = SmoothnessSlider, MaxDistance = MaxDistanceSlider, Prediction = PredictionSlider,
+        Priority = PriorityDropdown, ESPBoxStyle = ESPBoxStyleDropdown,
+        ESPDistance = ESPDistanceSlider, ESPColor = ESPColorPicker, ESPChamsColor = ESPChamsColorPicker,
+        BackgroundColor = BGColorPicker, MainColor = MainColorPicker,
+        AccentColor = AccentColorPicker, OutlineColor = OutlineColorPicker, FontColor = FontColorPicker,
     }
 
     local ConfigGroup = Tabs["UI Settings"]:AddRightGroupbox("Configuration")
 
-    local ConfigListDropdown = ConfigGroup:AddDropdown("ConfigList", {
-        Text = "Config list", Values = {}, AllowNull = true,
-    })
-
-    local ConfigNameInput = ConfigGroup:AddInput("ConfigName", {
-        Text = "Config name",
-    })
+    local ConfigListDropdown = ConfigGroup:AddDropdown("ConfigList", { Text = "Config list", Values = {}, AllowNull = true })
+    local ConfigNameInput = ConfigGroup:AddInput("ConfigName", { Text = "Config name" })
 
     local function GetConfigList()
         local out = {}
@@ -1029,29 +820,19 @@ if VALID_KEYS[userEnteredKey] then
     end
 
     local function SaveConfig(Name)
-        if (not Name or Name:gsub("%s", "") == "") then
-            return Library:Notify("Invalid config name (empty)", 2)
-        end
+        if (not Name or Name:gsub("%s", "") == "") then return Library:Notify("Invalid config name (empty)", 2) end
         local Data = { objects = {} }
-        for Idx, Toggle in next, SaveToggles do
-            table.insert(Data.objects, { type = "Toggle", idx = Idx, value = Toggle.Value })
-        end
+        for Idx, Toggle in next, SaveToggles do table.insert(Data.objects, { type = "Toggle", idx = Idx, value = Toggle.Value }) end
         for Idx, Option in next, SaveOptions do
             local Type = Option.Type
-            if (Type == "Slider") then
-                table.insert(Data.objects, { type = "Slider", idx = Idx, value = tostring(Option.Value) })
-            elseif (Type == "Dropdown") then
-                table.insert(Data.objects, { type = "Dropdown", idx = Idx, value = Option.Value, mutli = Option.Multi })
-            elseif (Type == "KeyPicker") then
-                table.insert(Data.objects, { type = "KeyPicker", idx = Idx, mode = Option.Mode, key = Option.Value })
-            elseif (Type == "ColorPicker") then
-                table.insert(Data.objects, { type = "ColorPicker", idx = Idx, r = Option.Value.R, g = Option.Value.G, b = Option.Value.B })
+            if (Type == "Slider") then table.insert(Data.objects, { type = "Slider", idx = Idx, value = tostring(Option.Value) })
+            elseif (Type == "Dropdown") then table.insert(Data.objects, { type = "Dropdown", idx = Idx, value = Option.Value, mutli = Option.Multi })
+            elseif (Type == "KeyPicker") then table.insert(Data.objects, { type = "KeyPicker", idx = Idx, mode = Option.Mode, key = Option.Value })
+            elseif (Type == "ColorPicker") then table.insert(Data.objects, { type = "ColorPicker", idx = Idx, r = Option.Value.R, g = Option.Value.G, b = Option.Value.B })
             end
         end
         local Success, Encoded = pcall(HttpService.JSONEncode, HttpService, Data)
-        if (not Success) then
-            return Library:Notify("Failed to save config: encode error", 3)
-        end
+        if (not Success) then return Library:Notify("Failed to save config: encode error", 3) end
         writefile(CONFIG_FOLDER .. "/" .. Name .. ".json", Encoded)
         Library:Notify(string.format('Created config "%s"', Name), 3)
         RefreshConfigList()
@@ -1064,19 +845,13 @@ if VALID_KEYS[userEnteredKey] then
         local Success, Decoded = pcall(HttpService.JSONDecode, HttpService, readfile(Path))
         if (not Success) then return Library:Notify("Failed to load config: decode error", 3) end
         for _, Object in next, Decoded.objects do
-            local Toggle = SaveToggles[Object.idx]
-            local Option = SaveOptions[Object.idx]
-            if (Toggle and Object.type == "Toggle") then
-                Toggle:SetValue(Object.value)
+            local Toggle = SaveToggles[Object.idx]; local Option = SaveOptions[Object.idx]
+            if (Toggle and Object.type == "Toggle") then Toggle:SetValue(Object.value)
             elseif (Option) then
-                if (Object.type == "Slider") then
-                    Option:SetValue(Object.value)
-                elseif (Object.type == "Dropdown") then
-                    Option:SetValue(Object.value)
-                elseif (Object.type == "KeyPicker") then
-                    Option:SetValue({ Object.key, Object.mode })
-                elseif (Object.type == "ColorPicker") then
-                    Option:SetValue(Color3.new(Object.r, Object.g, Object.b))
+                if (Object.type == "Slider") then Option:SetValue(Object.value)
+                elseif (Object.type == "Dropdown") then Option:SetValue(Object.value)
+                elseif (Object.type == "KeyPicker") then Option:SetValue({ Object.key, Object.mode })
+                elseif (Object.type == "ColorPicker") then Option:SetValue(Color3.new(Object.r, Object.g, Object.b))
                 end
             end
         end
