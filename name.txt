@@ -19,7 +19,6 @@ local function GetValidKeyList()
     return table.concat(keys, ", ")
 end
 
--- // Show the error on screen instead of only the console
 local function ShowKeyError()
     local sg = Instance.new("ScreenGui")
     sg.Name = "PancakeKeyError"
@@ -92,29 +91,12 @@ if VALID_KEYS[userEnteredKey] then
     print("[SUCCESS]: Key validated. Running protected payload...")
 
     -- ==========================================================
-    -- PROTECTED PAYLOAD (Paste your scrambled/encrypted code below)
+    -- PROTECTED PAYLOAD
     -- ==========================================================
 --[[
   Pancake Hub
   --------------------------------------------------------------------
   A legit (camera-based) aimbot for Block Spin.
-
-  Instead of silent-aiming (hooking raycasts) this one moves your
-  CAMERA toward the target while you hold the aim key, with smoothing,
-  a FOV limit and hitbox selection. It looks like a real player
-  turning, so it never touches HumanoidRootPart.CFrame and cannot be
-  flagged as a TP.
-
-  Requirements:
-    - Executor with Drawing support (Xeno).
-    - Internet access (loads LinoriaLib for the UI).
-
-  Usage:
-    1. Load the script in Xeno.
-    2. "Enabled" is on by default; the aim key is right mouse (hold).
-    3. Hold the key near a target to lock onto them.
-    4. Press Right Shift (or use the "Show UI" toggle in UI Settings)
-       to open/close the menu. No custom cursor is drawn.
 ]]
 
 -- // Dependencies (LinoriaLib UI)
@@ -143,15 +125,12 @@ local Tabs = {
     ["UI Settings"] = Window:AddTab("UI Settings"),
 }
 
--- // Override the menu toggle so it does NOT draw LinoriaLib's
--- // triangle cursor (we use the game's own cursor instead)
 function Library.Toggle()
     Window.Holder.Visible = not Window.Holder.Visible
 end
 Window.Holder.Visible = true
 
--- // Aiming options (captured as locals - the global Options table is
--- // unreliable on some executors)
+-- // Aiming options
 local AimingGroup = Tabs.Aiming:AddLeftGroupbox("Aimbot")
 
 local EnabledToggle = AimingGroup:AddToggle("Enabled", {
@@ -237,13 +216,11 @@ local function IsAlive(Character)
     if (not Character) then
         return false
     end
-
     local Humanoid = Character:FindFirstChildOfClass("Humanoid")
     local RootPart = Character:FindFirstChild("HumanoidRootPart")
     return Humanoid and RootPart and Humanoid.Health > 0
 end
 
--- // Find the best target and return the aim point (or nil)
 local function GetTargetPoint()
     local ViewportCenter = Camera.ViewportSize / 2
     local BestPart = nil
@@ -296,7 +273,6 @@ local function GetTargetPoint()
 
     local Point = BestPart.Position
 
-    -- // Simple prediction
     if (PredictionSlider.Value > 0) then
         local Velocity = BestPart.AssemblyLinearVelocity or Vector3.new()
         local TravelTime = (Point - Camera.CFrame.Position).Magnitude / 1000
@@ -306,7 +282,6 @@ local function GetTargetPoint()
     return Point
 end
 
--- // Main loop - runs after the game's own camera so we win the override
 RunService:UnbindFromRenderStep("BlockSpinLegitAim")
 RunService:BindToRenderStep("BlockSpinLegitAim", Enum.RenderPriority.Camera.Value + 1, function()
     local Active = EnabledToggle.Value and EnabledKey:GetState()
@@ -319,7 +294,6 @@ RunService:BindToRenderStep("BlockSpinLegitAim", Enum.RenderPriority.Camera.Valu
         return
     end
 
-    -- // Aim: rotate the camera onto the target
     local Desired = CFrame.lookAt(Camera.CFrame.Position, Target)
     local Smooth = SmoothnessSlider.Value / 100
     if (Smooth >= 1) then
@@ -328,3 +302,637 @@ RunService:BindToRenderStep("BlockSpinLegitAim", Enum.RenderPriority.Camera.Valu
         Camera.CFrame = Camera.CFrame:Lerp(Desired, Smooth)
     end
 end)
+-- // ESP
+local ESPTab = Tabs.ESP
+local ESPGroup = ESPTab:AddLeftGroupbox("ESP")
+
+local ESPToggle = ESPGroup:AddToggle("ESPEnabled", {
+    Text = "Enabled",
+    Default = true,
+    Tooltip = "Master toggle for the ESP",
+})
+
+local ESPBoxesToggle = ESPGroup:AddToggle("ESPBoxes", {
+    Text = "Boxes",
+    Default = true,
+    Tooltip = "Draw a box around each player",
+})
+
+local ESPNameToggle = ESPGroup:AddToggle("ESPName", {
+    Text = "Names",
+    Default = true,
+    Tooltip = "Draw player names above the box",
+})
+
+local ESPHealthToggle = ESPGroup:AddToggle("ESPHealth", {
+    Text = "Health",
+    Default = true,
+    Tooltip = "Show health numbers under the box",
+})
+
+local ESPTeamCheckToggle = ESPGroup:AddToggle("ESPTeamCheck", {
+    Text = "Ignore Teammates",
+    Default = true,
+    Tooltip = "Do not show players on your team",
+})
+
+local ESPDistanceSlider = ESPGroup:AddSlider("ESPDistance", {
+    Text = "Max Distance",
+    Default = 200,
+    Min = 5,
+    Max = 1500,
+    Suffix = " studs",
+    Rounding = 1,
+    Tooltip = "Maximum range to draw ESP for",
+})
+
+local ESPColorPicker = ESPGroup:AddColorPicker("ESPColor", {
+    Text = "ESP Color",
+    Default = Color3.fromRGB(255, 60, 60),
+    Tooltip = "Color for ESP boxes and text",
+})
+
+local ESPCache = {}
+
+local function EnsureESP(Player)
+    local Entry = ESPCache[Player]
+    if (not Entry) then
+        Entry = {
+            Box = Drawing.new("Square"),
+            Name = Drawing.new("Text"),
+            Health = Drawing.new("Text"),
+        }
+
+        Entry.Box.Thickness = 1
+        Entry.Box.Transparency = 1
+        Entry.Box.Color = Color3.fromRGB(255, 60, 60)
+
+        Entry.Name.Center = true
+        Entry.Name.Outline = true
+        Entry.Name.OutlineColor = Color3.new(0, 0, 0)
+        Entry.Name.Size = 13
+
+        Entry.Health.Center = true
+        Entry.Health.Outline = true
+        Entry.Health.OutlineColor = Color3.new(0, 0, 0)
+        Entry.Health.Size = 12
+
+        ESPCache[Player] = Entry
+    end
+    return Entry
+end
+
+Players.PlayerRemoving:Connect(function(Player)
+    local Entry = ESPCache[Player]
+    if (Entry) then
+        Entry.Box:Remove()
+        Entry.Name:Remove()
+        Entry.Health:Remove()
+        ESPCache[Player] = nil
+    end
+end)
+
+RunService:BindToRenderStep("BlockSpinESP", Enum.RenderPriority.Character.Value, function()
+    local Enabled = ESPToggle.Value
+    local MaxDist = ESPDistanceSlider.Value
+
+    for _, Player in ipairs(Players:GetPlayers()) do
+        if (Player == LocalPlayer) then
+            local SelfEntry = ESPCache[Player]
+            if (SelfEntry) then
+                SelfEntry.Box.Visible = false
+                SelfEntry.Name.Visible = false
+                SelfEntry.Health.Visible = false
+            end
+            continue
+        end
+
+        local Entry = EnsureESP(Player)
+        local Character = Player.Character
+        local RootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+        local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+        local Show = false
+
+        if (Enabled and RootPart and Humanoid and Humanoid.Health > 0) then
+            local IsTeammate = LocalPlayer.Team and Player.Team and Player.Team == LocalPlayer.Team
+            if (not (ESPTeamCheckToggle.Value and IsTeammate)) then
+                local Range = (RootPart.Position - Camera.CFrame.Position).Magnitude
+                if (Range <= MaxDist) then
+                    local Head = Character:FindFirstChild("Head")
+                    local HeadTop = Head and (Head.Position + Vector3.new(0, Head.Size.Y / 2, 0)) or (RootPart.Position + Vector3.new(0, 3, 0))
+                    local FeetPos = RootPart.Position - Vector3.new(0, 3, 0)
+
+                    local ScreenTop, OnTop = Camera:WorldToScreenPoint(HeadTop)
+                    local ScreenFeet, OnFeet = Camera:WorldToScreenPoint(FeetPos)
+
+                    if (OnTop and OnFeet) then
+                        local TopY = math.min(ScreenTop.Y, ScreenFeet.Y)
+                        local BottomY = math.max(ScreenTop.Y, ScreenFeet.Y)
+                        local BoxHeight = BottomY - TopY
+                        local BoxWidth = BoxHeight * 0.6
+                        local CenterX = (ScreenTop.X + ScreenFeet.X) / 2
+
+                        if (ESPBoxesToggle.Value) then
+                            Entry.Box.Visible = true
+                            Entry.Box.Color = IsTeammate and Color3.fromRGB(60, 255, 60) or ESPColorPicker.Value
+                            Entry.Box.Position = Vector2.new(CenterX - BoxWidth / 2, TopY)
+                            Entry.Box.Size = Vector2.new(BoxWidth, BoxHeight)
+                        else
+                            Entry.Box.Visible = false
+                        end
+
+                        if (ESPNameToggle.Value) then
+                            Entry.Name.Visible = true
+                            Entry.Name.Text = Player.Name
+                            Entry.Name.Color = IsTeammate and Color3.fromRGB(60, 255, 60) or ESPColorPicker.Value
+                            Entry.Name.Position = Vector2.new(CenterX, TopY - 15)
+                        else
+                            Entry.Name.Visible = false
+                        end
+
+                        if (ESPHealthToggle.Value) then
+                            Entry.Health.Visible = true
+                            Entry.Health.Text = string.format("%d/%d", math.floor(Humanoid.Health), math.floor(Humanoid.MaxHealth))
+                            Entry.Health.Position = Vector2.new(CenterX, BottomY + 2)
+                        else
+                            Entry.Health.Visible = false
+                        end
+
+                        Show = true
+                    end
+                end
+            end
+        end
+
+        if (not Show) then
+            Entry.Box.Visible = false
+            Entry.Name.Visible = false
+            Entry.Health.Visible = false
+        end
+    end
+end)
+
+-- // Extras (Car PVP + Inventory Checker)
+local ESPExtrasGroup = ESPTab:AddRightGroupbox("Extras")
+
+local CarPVPToggle = ESPExtrasGroup:AddToggle("CarPVP", {
+    Text = "Car PVP",
+    Default = false,
+    Tooltip = "Force the camera to follow your character",
+})
+
+local CarPVPConnection = nil
+
+local function StartCarPVP()
+    local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local Humanoid = Character:WaitForChild("Humanoid")
+
+    Camera.CameraType = Enum.CameraType.Custom
+    Camera.CameraSubject = Humanoid
+
+    if (CarPVPConnection) then
+        CarPVPConnection:Disconnect()
+    end
+
+    CarPVPConnection = RunService.RenderStepped:Connect(function()
+        if (not CarPVPToggle.Value) then
+            return
+        end
+
+        local Char = LocalPlayer.Character
+        local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+
+        if (Hum) then
+            Camera.CameraType = Enum.CameraType.Custom
+            Camera.CameraSubject = Hum
+        end
+    end)
+end
+
+local function StopCarPVP()
+    if (CarPVPConnection) then
+        CarPVPConnection:Disconnect()
+        CarPVPConnection = nil
+    end
+
+    local Character = LocalPlayer.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+
+    if (Humanoid) then
+        Camera.CameraType = Enum.CameraType.Custom
+        Camera.CameraSubject = Humanoid
+    end
+end
+
+CarPVPToggle:OnChanged(function(Value)
+    if (Value) then
+        StartCarPVP()
+    else
+        StopCarPVP()
+    end
+end)
+
+-- // Inventory Checker HUD
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local HudGui = Instance.new("ScreenGui")
+HudGui.Name = "InventoryHudGui"
+HudGui.ResetOnSpawn = false
+HudGui.Parent = PlayerGui
+
+local HudFrame = Instance.new("Frame")
+HudFrame.Name = "HudFrame"
+HudFrame.Size = UDim2.new(0, 220, 0, 300)
+HudFrame.Position = UDim2.new(0, 15, 0.3, 0)
+HudFrame.BackgroundTransparency = 1
+HudFrame.BorderSizePixel = 0
+HudFrame.Visible = false
+HudFrame.Parent = HudGui
+
+local HudTitle = Instance.new("TextLabel")
+HudTitle.Size = UDim2.new(1, 0, 0, 30)
+HudTitle.BackgroundTransparency = 1
+HudTitle.Text = "Inventory Checker"
+HudTitle.TextColor3 = Color3.fromRGB(228, 228, 231)
+HudTitle.TextSize = 14
+HudTitle.Font = Enum.Font.SourceSansBold
+HudTitle.TextXAlignment = Enum.TextXAlignment.Left
+HudTitle.Parent = HudFrame
+
+local HudScroll = Instance.new("ScrollingFrame")
+HudScroll.Size = UDim2.new(1, 0, 1, -30)
+HudScroll.Position = UDim2.new(0, 0, 0, 30)
+HudScroll.BackgroundTransparency = 1
+HudScroll.BorderSizePixel = 0
+HudScroll.ScrollBarThickness = 2
+HudScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+HudScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+HudScroll.Parent = HudFrame
+
+local HudTextLabel = Instance.new("TextLabel")
+HudTextLabel.Size = UDim2.new(1, 0, 0, 0)
+HudTextLabel.AutomaticSize = Enum.AutomaticSize.Y
+HudTextLabel.BackgroundTransparency = 1
+HudTextLabel.Text = "Scanning inventories..."
+HudTextLabel.TextColor3 = Color3.fromRGB(212, 212, 216)
+HudTextLabel.TextSize = 13
+HudTextLabel.Font = Enum.Font.SourceSansBold
+HudTextLabel.TextXAlignment = Enum.TextXAlignment.Left
+HudTextLabel.TextYAlignment = Enum.TextYAlignment.Top
+HudTextLabel.TextWrapped = true
+HudTextLabel.Parent = HudScroll
+
+local InvCheckerToggle = ESPExtrasGroup:AddToggle("InventoryChecker", {
+    Text = "Inventory Checker HUD",
+    Default = false,
+    Tooltip = "Show a HUD that scans every player's inventory",
+    Callback = function(Value)
+        HudFrame.Visible = Value
+    end,
+})
+
+-- // BlockSpin weapon database
+local ITEM_DATABASE = {
+    {meshPattern = "c9_cube", displayName = "C9", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "glock_colt45", displayName = "Glock", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "uzi_cube", displayName = "UZI", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "m24_cube", displayName = "M24", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "revolver anaconda_cube", displayName = "Anaconda", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "mp5_cube", displayName = "MP5", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "firework launcher_cylinder", displayName = "FireworkL", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "remington_cube", displayName = "RemingtonSG", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "double barrel shotgun_cube", displayName = "Double/Sawnoff", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "rpg_cube", displayName = "RPG", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "p226_cube", displayName = "P226", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "huntingrifle_cube", displayName = "HuntingR", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "g3_cube", displayName = "G3", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "draco_cube", displayName = "Draco", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "ak47_cube", displayName = "AK47", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "crossbox_cube", displayName = "Crossbow", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "m16 aug_Cube", displayName = "Skorpion", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "aug_Cube", displayName = "M16", color = Color3.new(1, 1, 1), isPrefix = true},
+    {meshPattern = "new melees_cylinder.002", displayName = "Sledge Hammer", color = Color3.new(1, 165/255, 0)},
+    {meshPattern = "weapon tools_cylinder.005", displayName = "Shovel", color = Color3.new(1, 165/255, 0)},
+    {meshPattern = "weapon tools_cube.005", displayName = "Machete", color = Color3.new(1, 165/255, 0)},
+    {meshPattern = "weapon tools_cylinder", displayName = "Crowbar", color = Color3.new(1, 165/255, 0)},
+    {meshPattern = "new melees_plane.003", displayName = "Butcher Knife", color = Color3.new(1, 165/255, 0)},
+    {meshPattern = "weapon tools_cube.001", displayName = "Wrench", color = Color3.new(1, 165/255, 0)},
+    {meshPattern = "new melees_cylinder.004", displayName = "Tactical Shovel", color = Color3.new(1, 1, 0)},
+    {meshPattern = "new melees_plane.005", displayName = "Tactical Knife", color = Color3.new(1, 1, 0)},
+    {meshPattern = "new melees_plane", displayName = "Tactical Axe", color = Color3.new(1, 1, 0)},
+    {meshPattern = "weapon tools_cube.006", displayName = "Switchblade", color = Color3.new(1, 165/255, 0)},
+    {meshPattern = "weapon tools_1.001", displayName = "Barbed Bat", color = Color3.new(1, 0, 0)},
+    {meshPattern = "1a_Plane", displayName = "Combat Axe", color = Color3.new(1, 0, 0), isPrefix = true}
+}
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            if HudFrame.Visible then
+                local DISPLAYENTRIES = {}
+                for _, instance in ipairs(Players:GetChildren()) do
+                    if not instance:IsA("Player") then continue end
+                    local pObj = instance
+                    local pName = pObj.Name
+                    local SETITEMS = {}
+                    local ITEMTODISPLAY = {}
+                    local ITEMCHECK = {}
+
+                    local backpack = pObj:FindFirstChild("Backpack")
+                    if backpack then
+                        for _, tool in ipairs(backpack:GetChildren()) do
+                            if tool:IsA("Tool") then table.insert(ITEMCHECK, tool) end
+                        end
+                    end
+
+                    local character = pObj.Character
+                    if character then
+                        for _, child in ipairs(character:GetChildren()) do
+                            if child:IsA("Tool") then table.insert(ITEMCHECK, child) end
+                        end
+                    end
+
+                    for _, tool in ipairs(ITEMCHECK) do
+                        local identified = false
+                        for _, part in ipairs(tool:GetChildren()) do
+                            local partName = part.Name
+                            local prefix = "Meshes/"
+                            if string.sub(partName, 1, #prefix) == prefix then
+                                local subName = string.lower(string.sub(partName, #prefix + 1))
+                                for _, entry in ipairs(ITEM_DATABASE) do
+                                    local pattern = string.lower(entry.meshPattern)
+                                    local matched = false
+                                    if entry.isPrefix then
+                                        if string.sub(subName, 1, #pattern) == pattern then matched = true end
+                                    else
+                                        if subName == pattern then matched = true end
+                                    end
+
+                                    if matched then
+                                        if not SETITEMS[entry.displayName] then
+                                            SETITEMS[entry.displayName] = true
+                                            table.insert(ITEMTODISPLAY, "- " .. entry.displayName)
+                                        end
+                                        identified = true
+                                        break
+                                    end
+                                end
+                            elseif partName == "Butt" then
+                                if not SETITEMS["Axe"] then
+                                    SETITEMS["Axe"] = true
+                                    table.insert(ITEMTODISPLAY, "- Axe")
+                                end
+                                identified = true
+                            elseif partName == "Bat" then
+                                if not SETITEMS["Bat"] then
+                                    SETITEMS["Bat"] = true
+                                    table.insert(ITEMTODISPLAY, "- Bat")
+                                end
+                                identified = true
+                            end
+                            if identified then break end
+                        end
+                    end
+
+                    if #ITEMTODISPLAY > 0 then
+                        table.insert(DISPLAYENTRIES, pName .. ":\n" .. table.concat(ITEMTODISPLAY, "\n"))
+                    end
+                end
+
+                local resultStr = table.concat(DISPLAYENTRIES, "\n\n")
+                if resultStr == "" then
+                    HudTextLabel.Text = "No player inventories detected."
+                else
+                    HudTextLabel.Text = resultStr
+                end
+            end
+        end)
+        task.wait(0.5)
+    end
+end)
+-- // UI visibility toggle (also bound to a key, default: Right Shift)
+local UISettingsGroup = Tabs["UI Settings"]:AddLeftGroupbox("UI")
+
+local ShowUIToggle = UISettingsGroup:AddToggle("ShowUI", {
+    Text = "Show UI",
+    Default = true,
+    Tooltip = "Show or hide the menu (also toggled by the key)",
+    Callback = function(Value)
+        Window.Holder.Visible = Value
+    end,
+})
+ShowUIToggle:AddKeyPicker("ShowUIKey", {
+    Text = "UI Toggle Key",
+    Default = Enum.KeyCode.RightShift,
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Modes = {"Toggle"},
+    IgnoreProcessedCheck = true,
+})
+local ShowUIKey = ShowUIToggle.Addons[1]
+
+-- // Theme manager (populates part of the "UI Settings" tab)
+ThemeManager:SetLibrary(Library)
+ThemeManager:SetFolder("BlockSpinLegit")
+ThemeManager:ApplyToTab(Tabs["UI Settings"])
+
+-- // Self-contained config saving
+local HttpService = game:GetService("HttpService")
+local CONFIG_FOLDER = "BlockSpinLegit/Configs/settings"
+
+for _, Folder in ipairs({ "BlockSpinLegit", "BlockSpinLegit/Configs", CONFIG_FOLDER }) do
+    if not isfolder(Folder) then
+        makefolder(Folder)
+    end
+end
+
+-- // Everything we want to persist, captured as direct references
+local SaveToggles = {
+    Enabled = EnabledToggle,
+    TeamCheck = TeamCheckToggle,
+    ESPEnabled = ESPToggle,
+    ESPBoxes = ESPBoxesToggle,
+    ESPName = ESPNameToggle,
+    ESPHealth = ESPHealthToggle,
+    ESPTeamCheck = ESPTeamCheckToggle,
+    CarPVP = CarPVPToggle,
+    InventoryChecker = InvCheckerToggle,
+}
+
+local SaveOptions = {
+    EnabledKey = EnabledKey,
+    FOV = FOVSlider,
+    Hitbox = HitboxDropdown,
+    Smoothness = SmoothnessSlider,
+    MaxDistance = MaxDistanceSlider,
+    Prediction = PredictionSlider,
+    ESPDistance = ESPDistanceSlider,
+    ESPColor = ESPColorPicker,
+}
+
+local ConfigGroup = Tabs["UI Settings"]:AddRightGroupbox("Configuration")
+
+local ConfigListDropdown = ConfigGroup:AddDropdown("ConfigList", {
+    Text = "Config list",
+    Values = {},
+    AllowNull = true,
+})
+
+local ConfigNameInput = ConfigGroup:AddInput("ConfigName", {
+    Text = "Config name",
+})
+
+local function GetConfigList()
+    local out = {}
+    for _, file in ipairs(listfiles(CONFIG_FOLDER)) do
+        local Name = file:match("([^/\\]+)%.json$")
+        if (Name) then
+            table.insert(out, Name)
+        end
+    end
+    return out
+end
+
+local function RefreshConfigList()
+    ConfigListDropdown.Values = GetConfigList()
+    ConfigListDropdown:SetValues()
+    ConfigListDropdown:SetValue(nil)
+end
+
+local function SaveConfig(Name)
+    if (not Name or Name:gsub("%s", "") == "") then
+        return Library:Notify("Invalid config name (empty)", 2)
+    end
+
+    local Data = { objects = {} }
+
+    for Idx, Toggle in next, SaveToggles do
+        table.insert(Data.objects, { type = "Toggle", idx = Idx, value = Toggle.Value })
+    end
+
+    for Idx, Option in next, SaveOptions do
+        local Type = Option.Type
+        if (Type == "Slider") then
+            table.insert(Data.objects, { type = "Slider", idx = Idx, value = tostring(Option.Value) })
+        elseif (Type == "Dropdown") then
+            table.insert(Data.objects, { type = "Dropdown", idx = Idx, value = Option.Value, mutli = Option.Multi })
+        elseif (Type == "KeyPicker") then
+            table.insert(Data.objects, { type = "KeyPicker", idx = Idx, mode = Option.Mode, key = Option.Value })
+        elseif (Type == "ColorPicker") then
+            table.insert(Data.objects, { type = "ColorPicker", idx = Idx, r = Option.Value.R, g = Option.Value.G, b = Option.Value.B })
+        end
+    end
+
+    local Success, Encoded = pcall(HttpService.JSONEncode, HttpService, Data)
+    if (not Success) then
+        return Library:Notify("Failed to save config: encode error", 3)
+    end
+
+    writefile(CONFIG_FOLDER .. "/" .. Name .. ".json", Encoded)
+    Library:Notify(string.format('Created config "%s"', Name), 3)
+    RefreshConfigList()
+end
+
+local function LoadConfig(Name)
+    if (not Name) then
+        return Library:Notify("No config selected", 2)
+    end
+
+    local Path = CONFIG_FOLDER .. "/" .. Name .. ".json"
+    if (not isfile(Path)) then
+        return Library:Notify("Config not found", 2)
+    end
+
+    local Success, Decoded = pcall(HttpService.JSONDecode, HttpService, readfile(Path))
+    if (not Success) then
+        return Library:Notify("Failed to load config: decode error", 3)
+    end
+
+    for _, Object in next, Decoded.objects do
+        local Toggle = SaveToggles[Object.idx]
+        local Option = SaveOptions[Object.idx]
+
+        if (Toggle and Object.type == "Toggle") then
+            Toggle:SetValue(Object.value)
+        elseif (Option) then
+            if (Object.type == "Slider") then
+                Option:SetValue(Object.value)
+            elseif (Object.type == "Dropdown") then
+                Option:SetValue(Object.value)
+            elseif (Object.type == "KeyPicker") then
+                Option:SetValue({ Object.key, Object.mode })
+            elseif (Object.type == "ColorPicker") then
+                Option:SetValue(Color3.new(Object.r, Object.g, Object.b))
+            end
+        end
+    end
+
+    Library:Notify(string.format('Loaded config "%s"', Name), 3)
+end
+
+ConfigGroup:AddDivider()
+
+ConfigGroup:AddButton({
+    Text = "Create config",
+    Func = function()
+        SaveConfig(ConfigNameInput.Value)
+    end,
+})
+
+ConfigGroup:AddButton({
+    Text = "Overwrite config",
+    Func = function()
+        local Name = ConfigListDropdown.Value
+        if (Name) then
+            SaveConfig(Name)
+        else
+            Library:Notify("No config selected", 2)
+        end
+    end,
+})
+
+ConfigGroup:AddButton({
+    Text = "Load config",
+    Func = function()
+        LoadConfig(ConfigListDropdown.Value)
+    end,
+})
+
+ConfigGroup:AddButton({
+    Text = "Refresh config list",
+    Func = RefreshConfigList,
+})
+
+local AutoloadLabel = ConfigGroup:AddLabel("Current autoload config: none", true)
+local AUTOLOAD_FILE = CONFIG_FOLDER .. "/autoload.txt"
+
+ConfigGroup:AddButton({
+    Text = "Autoload config",
+    Func = function()
+        local Name = ConfigListDropdown.Value
+        if (not Name) then
+            return Library:Notify("No config selected", 2)
+        end
+        writefile(AUTOLOAD_FILE, Name)
+        AutoloadLabel:SetText("Current autoload config: " .. Name)
+        Library:Notify(string.format('Set "%s" to auto load', Name), 3)
+    end,
+})
+
+if (isfile(AUTOLOAD_FILE)) then
+    local Name = readfile(AUTOLOAD_FILE)
+    AutoloadLabel:SetText("Current autoload config: " .. Name)
+    LoadConfig(Name)
+end
+
+Window:SelectTab(1)
+    -- ==========================================================
+    -- END OF PROTECTED PAYLOAD
+    -- ==========================================================
+else
+    print("[ERROR]: Invalid or missing script key.")
+    print("  Set _G.script_key = \"<key>\" BEFORE running this script.")
+    print("  Valid keys: " .. GetValidKeyList())
+    print('  You entered: "' .. tostring(userEnteredKey) .. '"')
+    ShowKeyError()
+end
