@@ -169,20 +169,10 @@ if VALID_KEYS[userEnteredKey] then
 
     local PriorityDropdown = AimingGroup:AddDropdown("Priority", {
         Text = "Target Priority",
-        Values = {"Crosshair", "Distance", "Health", "FOV + Distance"},
+        Values = {"Crosshair", "Distance", "Health"},
         Default = 1,
         Multi = false,
         Tooltip = "How targets are ranked",
-    })
-
-    local FOVSlider = AimingGroup:AddSlider("FOV", {
-        Text = "FOV",
-        Default = 90,
-        Min = 5,
-        Max = 800,
-        Suffix = "px",
-        Rounding = 1,
-        Tooltip = "Only targets inside this distance from the crosshair get locked",
     })
 
     local SmoothnessSlider = AimingGroup:AddSlider("Smoothness", {
@@ -235,45 +225,12 @@ if VALID_KEYS[userEnteredKey] then
         Tooltip = "Skip players in PlatformStanding state",
     })
 
-    local ShowFOVToggle = ExtrasGroup:AddToggle("ShowFOV", {
-        Text = "Show FOV Circle",
-        Default = true,
-    })
-
     local ShowTargetToggle = ExtrasGroup:AddToggle("ShowTarget", {
         Text = "Show Target Marker",
         Default = true,
     })
 
-    -- // FOV Circle & Target Marker (Instance-based — no Drawing API needed)
-    local FOVGui = Instance.new("ScreenGui")
-    FOVGui.Name = "PancakeFOV"
-    FOVGui.ResetOnSpawn = false
-    FOVGui.DisplayOrder = 999
-    FOVGui.Parent = game:GetService("CoreGui")
-
-    local FOVFrame = Instance.new("Frame")
-    FOVFrame.Name = "FOVCircle"
-    FOVFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    FOVFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    FOVFrame.Size = UDim2.new(0, FOVSlider.Value * 2, 0, FOVSlider.Value * 2)
-    FOVFrame.BackgroundTransparency = 1
-    FOVFrame.BorderSizePixel = 0
-    FOVFrame.Parent = FOVGui
-
-    local FOVCorner = Instance.new("UICorner")
-    FOVCorner.CornerRadius = UDim.new(1, 0)
-    FOVCorner.Parent = FOVFrame
-
-    local FOVStroke = Instance.new("UIStroke")
-    FOVStroke.Color = Color3.fromRGB(255, 255, 255)
-    FOVStroke.Thickness = 1.5
-    FOVStroke.Transparency = 0.2
-    FOVStroke.Parent = FOVFrame
-
-    FOVFrame.Visible = false
-
-    -- Target marker
+    -- // Target Marker (Instance-based — no Drawing API needed)
     local MarkerGui = Instance.new("ScreenGui")
     MarkerGui.Name = "PancakeMarker"
     MarkerGui.ResetOnSpawn = false
@@ -371,7 +328,6 @@ if VALID_KEYS[userEnteredKey] then
             if (not OnScreen) then continue end
 
             local ScreenDistance = (Vector2.new(ScreenPos.X, ScreenPos.Y) - ViewportCenter).Magnitude
-            if (ScreenDistance > FOVSlider.Value) then continue end
 
             if (WallCheckToggle.Value and not CanSeeTarget(Part.Position)) then continue end
 
@@ -400,10 +356,6 @@ if VALID_KEYS[userEnteredKey] then
             table.sort(list, function(a, b) return a.WorldDist < b.WorldDist end)
         elseif mode == "Health" then
             table.sort(list, function(a, b) return a.Health < b.Health end)
-        elseif mode == "FOV + Distance" then
-            table.sort(list, function(a, b)
-                return (a.ScreenDist + a.WorldDist * 0.5) < (b.ScreenDist + b.WorldDist * 0.5)
-            end)
         end
         return list[1]
     end
@@ -416,11 +368,6 @@ if VALID_KEYS[userEnteredKey] then
 
         local Active = EnabledToggle.Value and EnabledKey:GetState()
         local ViewportCenter = Camera.ViewportSize / 2
-
-        -- Update FOV circle
-        FOVFrame.Size = UDim2.new(0, FOVSlider.Value * 2, 0, FOVSlider.Value * 2)
-        FOVFrame.Visible = ShowFOVToggle.Value
-        FOVStroke.Color = ESP_CURRENT_COLOR
 
         if (not Active) then
             CurrentTarget = nil
@@ -1002,7 +949,6 @@ if VALID_KEYS[userEnteredKey] then
                 if data.NameLabel then data.NameLabel.TextColor3 = preset end
                 if data.Highlight then data.Highlight.OutlineColor = preset end
             end
-            if FOVStroke then FOVStroke.Color = preset end
         end
     end)
 
@@ -1028,7 +974,6 @@ if VALID_KEYS[userEnteredKey] then
         TeamCheck = TeamCheckToggle,
         WallCheck = WallCheckToggle,
         KnockedCheck = KnockedCheckToggle,
-        ShowFOV = ShowFOVToggle,
         ShowTarget = ShowTargetToggle,
         ESPEnabled = ESPToggle,
         ESPBoxes = ESPBoxesToggle,
@@ -1044,7 +989,6 @@ if VALID_KEYS[userEnteredKey] then
         AimbotMode = AimbotModeDropdown,
         Hitbox = HitboxDropdown,
         Priority = PriorityDropdown,
-        FOV = FOVSlider,
         Smoothness = SmoothnessSlider,
         MaxDistance = MaxDistanceSlider,
         Prediction = PredictionSlider,
