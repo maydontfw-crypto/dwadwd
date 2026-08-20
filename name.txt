@@ -19,6 +19,7 @@ local function GetValidKeyList()
     return table.concat(keys, ", ")
 end
 
+-- // Show the error on screen instead of only the console
 local function ShowKeyError()
     local sg = Instance.new("ScreenGui")
     sg.Name = "PancakeKeyError"
@@ -91,17 +92,33 @@ if VALID_KEYS[userEnteredKey] then
     print("[SUCCESS]: Key validated. Running protected payload...")
 
     -- ==========================================================
-    -- PROTECTED PAYLOAD
+    -- PROTECTED PAYLOAD (Paste your scrambled/encrypted code below)
     -- ==========================================================
 --[[
   Pancake Hub
   --------------------------------------------------------------------
   A legit (camera-based) aimbot for Block Spin.
+
+  Instead of silent-aiming (hooking raycasts) this one moves your
+  CAMERA toward the target while you hold the aim key, with smoothing,
+  a FOV limit and hitbox selection. It looks like a real player
+  turning, so it never touches HumanoidRootPart.CFrame and cannot be
+  flagged as a TP.
+
+  Requirements:
+    - Executor with Drawing support (Xeno).
+    - Internet access (loads LinoriaLib for the UI).
+
+  Usage:
+    1. Load the script in Xeno.
+    2. "Enabled" is on by default; the aim key is right mouse (hold).
+    3. Hold the key near a target to lock onto them.
+    4. Press Right Shift (or use the "Show UI" toggle in UI Settings)
+       to open/close the menu. No custom cursor is drawn.
 ]]
 
 -- // Dependencies (LinoriaLib UI)
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/LinoriaLib/main/Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/LinoriaLib/main/addons/ThemeManager.lua"))()
 
 -- // Services
 local Players = game:GetService("Players")
@@ -125,12 +142,15 @@ local Tabs = {
     ["UI Settings"] = Window:AddTab("UI Settings"),
 }
 
+-- // Override the menu toggle so it does NOT draw LinoriaLib's
+-- // triangle cursor (we use the game's own cursor instead)
 function Library.Toggle()
     Window.Holder.Visible = not Window.Holder.Visible
 end
 Window.Holder.Visible = true
 
--- // Aiming options
+-- // Aiming options (captured as locals - the global Options table is
+-- // unreliable on some executors)
 local AimingGroup = Tabs.Aiming:AddLeftGroupbox("Aimbot")
 
 local EnabledToggle = AimingGroup:AddToggle("Enabled", {
@@ -165,6 +185,8 @@ local HitboxDropdown = AimingGroup:AddDropdown("Hitbox", {
     Multi = false,
     Tooltip = "Which body part to aim at",
 })
+-- // LinoriaLib keeps the dropdown list open after picking, and the open
+-- // list blocks every slider below it. Close it after every selection.
 HitboxDropdown:OnChanged(function()
     HitboxDropdown:CloseDropdown()
 end)
@@ -207,6 +229,39 @@ local TeamCheckToggle = ExtrasGroup:AddToggle("TeamCheck", {
     Tooltip = "Do not aim at players on your team",
 })
 
+local WallCheckToggle = ExtrasGroup:AddToggle("WallCheck", {
+    Text = "Wall Check",
+    Default = true,
+    Tooltip = "Skip targets that are behind walls",
+})
+
+local PriorityDropdown = ExtrasGroup:AddDropdown("Priority", {
+    Text = "Target Priority",
+    Values = {"Closest to Crosshair", "Lowest HP", "Nearest Distance"},
+    Default = 1,
+    Multi = false,
+    Tooltip = "How to pick the best target",
+})
+PriorityDropdown:OnChanged(function()
+    PriorityDropdown:CloseDropdown()
+end)
+
+local SilentAimToggle = ExtrasGroup:AddToggle("SilentAim", {
+    Text = "Silent Aim",
+    Default = false,
+    Tooltip = "Redirect bullets toward the target (hooks raycasts)",
+})
+
+local SilentAimFOVSlider = ExtrasGroup:AddSlider("SilentAimFOV", {
+    Text = "Silent Aim FOV",
+    Default = 90,
+    Min = 5,
+    Max = 200,
+    Suffix = "px",
+    Rounding = 1,
+    Tooltip = "FOV for silent aim target selection",
+})
+
 -- // Helpers
 local function GetCharacter(Player)
     return Player.Character
@@ -216,22 +271,37 @@ local function IsAlive(Character)
     if (not Character) then
         return false
     end
+
     local Humanoid = Character:FindFirstChildOfClass("Humanoid")
     local RootPart = Character:FindFirstChild("HumanoidRootPart")
     return Humanoid and RootPart and Humanoid.Health > 0
 end
 
-local function GetTargetPoint()
+local function IsVisible(TargetPos)
+    local Origin = Camera.CFrame.Position
+    local Direction = (TargetPos - Origin)
+    local Params = RaycastParams.new()
+    Params.FilterType = Enum.RaycastFilterType.Exclude
+    Params.FilterDescendantsInstances = {LocalPlayer.Character}
+    local Result = Workspace:Raycast(Origin, Direction, Params)
+    return Result == nil
+end
+
+local function IsTeammateOf(Player)
+    return LocalPlayer.Team and Player.Team and Player.Team == LocalPlayer.Team
+end
+
+local function GetPlayersInFOV(FovOverride)
     local ViewportCenter = Camera.ViewportSize / 2
-    local BestPart = nil
-    local BestDistance = math.huge
+    local Fov = FovOverride or FOVSlider.Value
+    local Candidates = {}
 
     for _, Player in ipairs(Players:GetPlayers()) do
         if (Player == LocalPlayer) then
             continue
         end
 
-        if (TeamCheckToggle.Value and LocalPlayer.Team and Player.Team and Player.Team == LocalPlayer.Team) then
+        if (TeamCheckToggle.Value and IsTeammateOf(Player)) then
             continue
         end
 
@@ -257,24 +327,68 @@ local function GetTargetPoint()
         end
 
         local ScreenDistance = (Vector2.new(ScreenPos.X, ScreenPos.Y) - ViewportCenter).Magnitude
-        if (ScreenDistance > FOVSlider.Value) then
+        if (ScreenDistance > Fov) then
             continue
         end
 
-        if (ScreenDistance < BestDistance) then
-            BestDistance = ScreenDistance
-            BestPart = Part
+        if (WallCheckToggle.Value and not IsVisible(Part.Position)) then
+            continue
         end
+
+        local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+        table.insert(Candidates, {
+            Player = Player,
+            Part = Part,
+            ScreenDistance = ScreenDistance,
+            Range = Range,
+            Health = Humanoid and Humanoid.Health or math.huge,
+        })
     end
 
-    if (not BestPart) then
+    local Priority = PriorityDropdown.Value
+    if (Priority == "Lowest HP") then
+        table.sort(Candidates, function(a, b) return a.Health < b.Health end)
+    elseif (Priority == "Nearest Distance") then
+        table.sort(Candidates, function(a, b) return a.Range < b.Range end)
+    else
+        table.sort(Candidates, function(a, b) return a.ScreenDistance < b.ScreenDistance end)
+    end
+
+    return Candidates
+end
+
+-- // Silent Aim target (separate FOV from legit aim)
+local function GetSilentAimTarget()
+    local Candidates = GetPlayersInFOV(SilentAimFOVSlider.Value)
+    if (#Candidates == 0) then
         return nil
     end
 
-    local Point = BestPart.Position
+    local Best = Candidates[1]
+    local Point = Best.Part.Position
+    local Humanoid = Best.Player.Character and Best.Player.Character:FindFirstChildOfClass("Humanoid")
 
+    if (PredictionSlider.Value > 0 and Humanoid) then
+        local Velocity = Best.Part.AssemblyLinearVelocity or Vector3.new()
+        local TravelTime = (Point - Camera.CFrame.Position).Magnitude / 1000
+        Point = Point + Velocity * TravelTime * PredictionSlider.Value
+    end
+
+    return Point
+end
+-- // Find the best target and return the aim point (or nil)
+local function GetTargetPoint()
+    local Candidates = GetPlayersInFOV()
+    if (#Candidates == 0) then
+        return nil
+    end
+
+    local Best = Candidates[1]
+    local Point = Best.Part.Position
+
+    -- // Simple prediction
     if (PredictionSlider.Value > 0) then
-        local Velocity = BestPart.AssemblyLinearVelocity or Vector3.new()
+        local Velocity = Best.Part.AssemblyLinearVelocity or Vector3.new()
         local TravelTime = (Point - Camera.CFrame.Position).Magnitude / 1000
         Point = Point + Velocity * TravelTime * PredictionSlider.Value
     end
@@ -282,6 +396,7 @@ local function GetTargetPoint()
     return Point
 end
 
+-- // Main loop - runs after the game's own camera so we win the override
 RunService:UnbindFromRenderStep("BlockSpinLegitAim")
 RunService:BindToRenderStep("BlockSpinLegitAim", Enum.RenderPriority.Camera.Value + 1, function()
     local Active = EnabledToggle.Value and EnabledKey:GetState()
@@ -294,6 +409,7 @@ RunService:BindToRenderStep("BlockSpinLegitAim", Enum.RenderPriority.Camera.Valu
         return
     end
 
+    -- // Aim: rotate the camera onto the target
     local Desired = CFrame.lookAt(Camera.CFrame.Position, Target)
     local Smooth = SmoothnessSlider.Value / 100
     if (Smooth >= 1) then
@@ -302,6 +418,34 @@ RunService:BindToRenderStep("BlockSpinLegitAim", Enum.RenderPriority.Camera.Valu
         Camera.CFrame = Camera.CFrame:Lerp(Desired, Smooth)
     end
 end)
+
+-- // Silent Aim - hooks Raycast to redirect toward target
+local NamecallHook
+NamecallHook = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    local Method = getnamecallmethod()
+    local Args = {...}
+
+    if (SilentAimToggle.Value) then
+        local LocalChar = LocalPlayer.Character
+        if (LocalChar and self == Workspace) then
+            if (Method == "Raycast" or Method == "FindPartOnRay" or Method == "Blockcast") then
+                local Target = GetSilentAimTarget()
+                if (Target) then
+                    local Origin = Camera.CFrame.Position
+                    if (Method == "FindPartOnRay") then
+                        Args[1] = Ray.new(Origin, (Target - Origin).Unit * 500)
+                    else
+                        Args[2] = (Target - Origin)
+                    end
+                    return NamecallHook(self, unpack(Args))
+                end
+            end
+        end
+    end
+
+    return NamecallHook(self, ...)
+end))
+
 -- // ESP
 local ESPTab = Tabs.ESP
 local ESPGroup = ESPTab:AddLeftGroupbox("ESP")
@@ -318,6 +462,17 @@ local ESPBoxesToggle = ESPGroup:AddToggle("ESPBoxes", {
     Tooltip = "Draw a box around each player",
 })
 
+local ESPBoxStyleDropdown = ESPGroup:AddDropdown("ESPBoxStyle", {
+    Text = "Box Style",
+    Values = {"2D Box", "Corner Box"},
+    Default = 1,
+    Multi = false,
+    Tooltip = "Style of the ESP box",
+})
+ESPBoxStyleDropdown:OnChanged(function()
+    ESPBoxStyleDropdown:CloseDropdown()
+end)
+
 local ESPNameToggle = ESPGroup:AddToggle("ESPName", {
     Text = "Names",
     Default = true,
@@ -325,9 +480,21 @@ local ESPNameToggle = ESPGroup:AddToggle("ESPName", {
 })
 
 local ESPHealthToggle = ESPGroup:AddToggle("ESPHealth", {
-    Text = "Health",
+    Text = "Health Bar",
+    Default = true,
+    Tooltip = "Show a health bar next to the box with gradient color",
+})
+
+local ESPHealthTextToggle = ESPGroup:AddToggle("ESPHealthText", {
+    Text = "Health Text",
     Default = true,
     Tooltip = "Show health numbers under the box",
+})
+
+local ESPTracerToggle = ESPGroup:AddToggle("ESPTracers", {
+    Text = "Tracers",
+    Default = false,
+    Tooltip = "Draw lines from the bottom of your screen to each player",
 })
 
 local ESPTeamCheckToggle = ESPGroup:AddToggle("ESPTeamCheck", {
@@ -352,7 +519,60 @@ local ESPColorPicker = ESPGroup:AddColorPicker("ESPColor", {
     Tooltip = "Color for ESP boxes and text",
 })
 
+local ESPChamsToggle = ESPGroup:AddToggle("ESPChams", {
+    Text = "Chams",
+    Default = false,
+    Tooltip = "Highlight enemies through walls with colored glow",
+})
+
+local ESPChamsColorPicker = ESPGroup:AddColorPicker("ESPChamsColor", {
+    Text = "Chams Color",
+    Default = Color3.fromRGB(255, 60, 60),
+    Tooltip = "Color for chams highlight",
+})
+
 local ESPCache = {}
+local SmoothCache = {}
+local ChamCache = {}
+
+local function GetHealthColor(HealthPercent)
+    if (HealthPercent > 0.5) then
+        local T = (HealthPercent - 0.5) * 2
+        return Color3.new(1 - T * 0.4, 1, 0)
+    else
+        local T = HealthPercent * 2
+        return Color3.new(1, T, 0)
+    end
+end
+
+local function DrawCornerBox(Entry, X, Y, W, H, Color)
+    local CornerLen = math.min(W, H) * 0.25
+    local Lines = Entry.CornerLines
+    local Positions = {
+        {Vector2.new(X, Y), Vector2.new(X + CornerLen, Y)},
+        {Vector2.new(X, Y), Vector2.new(X, Y + CornerLen)},
+        {Vector2.new(X + W, Y), Vector2.new(X + W - CornerLen, Y)},
+        {Vector2.new(X + W, Y), Vector2.new(X + W, Y + CornerLen)},
+        {Vector2.new(X, Y + H), Vector2.new(X + CornerLen, Y + H)},
+        {Vector2.new(X, Y + H), Vector2.new(X, Y + H - CornerLen)},
+        {Vector2.new(X + W, Y + H), Vector2.new(X + W - CornerLen, Y + H)},
+        {Vector2.new(X + W, Y + H), Vector2.new(X + W, Y + H - CornerLen)},
+    }
+
+    for i = 1, 8 do
+        Lines[i].Visible = true
+        Lines[i].From = Positions[i][1]
+        Lines[i].To = Positions[i][2]
+        Lines[i].Color = Color
+        Lines[i].Thickness = 2
+    end
+end
+
+local function HideCornerBox(Entry)
+    for i = 1, 8 do
+        Entry.CornerLines[i].Visible = false
+    end
+end
 
 local function EnsureESP(Player)
     local Entry = ESPCache[Player]
@@ -361,7 +581,17 @@ local function EnsureESP(Player)
             Box = Drawing.new("Square"),
             Name = Drawing.new("Text"),
             Health = Drawing.new("Text"),
+            HealthBar = Drawing.new("Line"),
+            HealthBarBg = Drawing.new("Line"),
+            Tracer = Drawing.new("Line"),
+            CornerLines = {},
         }
+
+        for i = 1, 8 do
+            Entry.CornerLines[i] = Drawing.new("Line")
+            Entry.CornerLines[i].Thickness = 2
+            Entry.CornerLines[i].Transparency = 1
+        end
 
         Entry.Box.Thickness = 1
         Entry.Box.Transparency = 1
@@ -377,24 +607,66 @@ local function EnsureESP(Player)
         Entry.Health.OutlineColor = Color3.new(0, 0, 0)
         Entry.Health.Size = 12
 
+        Entry.HealthBar.Thickness = 3
+        Entry.HealthBar.Transparency = 1
+
+        Entry.HealthBarBg.Thickness = 3
+        Entry.HealthBarBg.Transparency = 0.5
+        Entry.HealthBarBg.Color = Color3.new(0, 0, 0)
+
+        Entry.Tracer.Thickness = 1
+        Entry.Tracer.Transparency = 0.7
+
         ESPCache[Player] = Entry
     end
+
+    if (not SmoothCache[Player]) then
+        SmoothCache[Player] = {X = 0, Y = 0, W = 0, H = 0}
+    end
+
+    if (ESPChamsToggle.Value) then
+        if (not ChamCache[Player]) then
+            local Highlight = Instance.new("Highlight")
+            Highlight.FillTransparency = 0.6
+            Highlight.OutlineTransparency = 0.2
+            Highlight.Parent = Workspace.Terrain
+            ChamCache[Player] = Highlight
+        end
+    end
+
     return Entry
 end
 
-Players.PlayerRemoving:Connect(function(Player)
+local function CleanupPlayer(Player)
     local Entry = ESPCache[Player]
     if (Entry) then
         Entry.Box:Remove()
         Entry.Name:Remove()
         Entry.Health:Remove()
+        Entry.HealthBar:Remove()
+        Entry.HealthBarBg:Remove()
+        Entry.Tracer:Remove()
+        for i = 1, 8 do
+            Entry.CornerLines[i]:Remove()
+        end
         ESPCache[Player] = nil
     end
-end)
+    SmoothCache[Player] = nil
+
+    local Cham = ChamCache[Player]
+    if (Cham) then
+        Cham:Destroy()
+        ChamCache[Player] = nil
+    end
+end
+
+Players.PlayerRemoving:Connect(CleanupPlayer)
 
 RunService:BindToRenderStep("BlockSpinESP", Enum.RenderPriority.Character.Value, function()
     local Enabled = ESPToggle.Value
     local MaxDist = ESPDistanceSlider.Value
+    local VpCenter = Camera.ViewportSize / 2
+    local SmoothFactor = 0.35
 
     for _, Player in ipairs(Players:GetPlayers()) do
         if (Player == LocalPlayer) then
@@ -403,6 +675,10 @@ RunService:BindToRenderStep("BlockSpinESP", Enum.RenderPriority.Character.Value,
                 SelfEntry.Box.Visible = false
                 SelfEntry.Name.Visible = false
                 SelfEntry.Health.Visible = false
+                SelfEntry.HealthBar.Visible = false
+                SelfEntry.HealthBarBg.Visible = false
+                SelfEntry.Tracer.Visible = false
+                HideCornerBox(SelfEntry)
             end
             continue
         end
@@ -426,36 +702,80 @@ RunService:BindToRenderStep("BlockSpinESP", Enum.RenderPriority.Character.Value,
                     local ScreenFeet, OnFeet = Camera:WorldToScreenPoint(FeetPos)
 
                     if (OnTop and OnFeet) then
-                        local TopY = math.min(ScreenTop.Y, ScreenFeet.Y)
-                        local BottomY = math.max(ScreenTop.Y, ScreenFeet.Y)
-                        local BoxHeight = BottomY - TopY
-                        local BoxWidth = BoxHeight * 0.6
-                        local CenterX = (ScreenTop.X + ScreenFeet.X) / 2
+                        local TargetTopY = math.min(ScreenTop.Y, ScreenFeet.Y)
+                        local TargetBottomY = math.max(ScreenTop.Y, ScreenFeet.Y)
+                        local TargetBoxH = TargetBottomY - TargetTopY
+                        local TargetBoxW = TargetBoxH * 0.6
+                        local TargetCenterX = (ScreenTop.X + ScreenFeet.X) / 2
+
+                        local Smooth = SmoothCache[Player]
+                        Smooth.X = Smooth.X + (TargetCenterX - TargetBoxW / 2 - Smooth.X) * SmoothFactor
+                        Smooth.Y = Smooth.Y + (TargetTopY - Smooth.Y) * SmoothFactor
+                        Smooth.W = Smooth.W + (TargetBoxW - Smooth.W) * SmoothFactor
+                        Smooth.H = Smooth.H + (TargetBoxH - Smooth.H) * SmoothFactor
+
+                        local X, Y, W, H = Smooth.X, Smooth.Y, Smooth.W, Smooth.H
+                        local Cx = X + W / 2
+                        local Color = IsTeammate and Color3.fromRGB(60, 255, 60) or ESPColorPicker.Value
 
                         if (ESPBoxesToggle.Value) then
-                            Entry.Box.Visible = true
-                            Entry.Box.Color = IsTeammate and Color3.fromRGB(60, 255, 60) or ESPColorPicker.Value
-                            Entry.Box.Position = Vector2.new(CenterX - BoxWidth / 2, TopY)
-                            Entry.Box.Size = Vector2.new(BoxWidth, BoxHeight)
+                            if (ESPBoxStyleDropdown.Value == "Corner Box") then
+                                Entry.Box.Visible = false
+                                DrawCornerBox(Entry, X, Y, W, H, Color)
+                            else
+                                HideCornerBox(Entry)
+                                Entry.Box.Visible = true
+                                Entry.Box.Color = Color
+                                Entry.Box.Position = Vector2.new(X, Y)
+                                Entry.Box.Size = Vector2.new(W, H)
+                            end
                         else
                             Entry.Box.Visible = false
+                            HideCornerBox(Entry)
                         end
 
                         if (ESPNameToggle.Value) then
                             Entry.Name.Visible = true
                             Entry.Name.Text = Player.Name
-                            Entry.Name.Color = IsTeammate and Color3.fromRGB(60, 255, 60) or ESPColorPicker.Value
-                            Entry.Name.Position = Vector2.new(CenterX, TopY - 15)
+                            Entry.Name.Color = Color
+                            Entry.Name.Position = Vector2.new(Cx, Y - 15)
                         else
                             Entry.Name.Visible = false
                         end
 
-                        if (ESPHealthToggle.Value) then
+                        if (ESPHealthBar.Value) then
+                            local HealthPct = math.clamp(Humanoid.Health / Humanoid.MaxHealth, 0, 1)
+                            local BarH = H * HealthPct
+                            local BarX = X - 4
+
+                            Entry.HealthBarBg.Visible = true
+                            Entry.HealthBarBg.From = Vector2.new(BarX, Y)
+                            Entry.HealthBarBg.To = Vector2.new(BarX, Y + H)
+
+                            Entry.HealthBar.Visible = true
+                            Entry.HealthBar.From = Vector2.new(BarX, Y + H - BarH)
+                            Entry.HealthBar.To = Vector2.new(BarX, Y + H)
+                            Entry.HealthBar.Color = GetHealthColor(HealthPct)
+                        else
+                            Entry.HealthBar.Visible = false
+                            Entry.HealthBarBg.Visible = false
+                        end
+
+                        if (ESPHealthTextToggle.Value) then
                             Entry.Health.Visible = true
                             Entry.Health.Text = string.format("%d/%d", math.floor(Humanoid.Health), math.floor(Humanoid.MaxHealth))
-                            Entry.Health.Position = Vector2.new(CenterX, BottomY + 2)
+                            Entry.Health.Position = Vector2.new(Cx, Y + H + 2)
                         else
                             Entry.Health.Visible = false
+                        end
+
+                        if (ESPTracerToggle.Value) then
+                            Entry.Tracer.Visible = true
+                            Entry.Tracer.From = Vector2.new(VpCenter.X, Camera.ViewportSize.Y)
+                            Entry.Tracer.To = Vector2.new(Cx, Y + H)
+                            Entry.Tracer.Color = Color
+                        else
+                            Entry.Tracer.Visible = false
                         end
 
                         Show = true
@@ -464,14 +784,33 @@ RunService:BindToRenderStep("BlockSpinESP", Enum.RenderPriority.Character.Value,
             end
         end
 
+        if (ESPChamsToggle.Value and Player.Character and Show) then
+            local Cham = ChamCache[Player]
+            if (Cham) then
+                Cham.FillColor = ESPChamsColorPicker.Value
+                Cham.OutlineColor = ESPChamsColorPicker.Value
+                Cham.Adornee = Player.Character
+                Cham.Enabled = true
+            end
+        else
+            local Cham = ChamCache[Player]
+            if (Cham) then
+                Cham.Enabled = false
+                Cham.Adornee = nil
+            end
+        end
+
         if (not Show) then
             Entry.Box.Visible = false
             Entry.Name.Visible = false
             Entry.Health.Visible = false
+            Entry.HealthBar.Visible = false
+            Entry.HealthBarBg.Visible = false
+            Entry.Tracer.Visible = false
+            HideCornerBox(Entry)
         end
     end
 end)
-
 -- // Extras (Car PVP + Inventory Checker)
 local ESPExtrasGroup = ESPTab:AddRightGroupbox("Extras")
 
@@ -710,7 +1049,7 @@ task.spawn(function()
         task.wait(0.5)
     end
 end)
--- // UI visibility toggle (also bound to a key, default: Right Shift)
+-- // UI Settings tab
 local UISettingsGroup = Tabs["UI Settings"]:AddLeftGroupbox("UI")
 
 local ShowUIToggle = UISettingsGroup:AddToggle("ShowUI", {
@@ -729,14 +1068,104 @@ ShowUIToggle:AddKeyPicker("ShowUIKey", {
     Modes = {"Toggle"},
     IgnoreProcessedCheck = true,
 })
-local ShowUIKey = ShowUIToggle.Addons[1]
 
--- // Theme manager (populates part of the "UI Settings" tab)
-ThemeManager:SetLibrary(Library)
-ThemeManager:SetFolder("BlockSpinLegit")
-ThemeManager:ApplyToTab(Tabs["UI Settings"])
+local PanicKeyGroup = Tabs["UI Settings"]:AddLeftGroupbox("Safety")
 
--- // Self-contained config saving
+local PanicKeyToggle = PanicKeyGroup:AddToggle("PanicKey", {
+    Text = "Panic Mode",
+    Default = false,
+    Tooltip = "Disables ALL features instantly when pressed",
+})
+PanicKeyToggle:AddKeyPicker("PanicKeyBind", {
+    Text = "Panic Key",
+    Default = Enum.KeyCode.End,
+    SyncToggleState = false,
+    Mode = "Toggle",
+    Modes = {"Toggle"},
+    IgnoreProcessedCheck = true,
+})
+
+local function ApplyPanic(State)
+    if (State) then
+        EnabledToggle:SetValue(false)
+        ESPToggle:SetValue(false)
+        SilentAimToggle:SetValue(false)
+        CarPVPToggle:SetValue(false)
+        InvCheckerToggle:SetValue(false)
+        ESPChamsToggle:SetValue(false)
+        Library:Notify("PANIC: All features disabled", 3)
+    end
+end
+
+PanicKeyToggle:OnChanged(ApplyPanic)
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if (PanicKeyToggle.Value) then
+            EnabledToggle:SetValue(false)
+            ESPToggle:SetValue(false)
+            SilentAimToggle:SetValue(false)
+            CarPVPToggle:SetValue(false)
+            InvCheckerToggle:SetValue(false)
+            ESPChamsToggle:SetValue(false)
+        end
+    end
+end)
+
+-- // Theme settings (built-in, no ThemeManager needed)
+local ThemeGroup = Tabs["UI Settings"]:AddRightGroupbox("Theme")
+
+local ThemeColorPickers = {}
+
+local BGColorPicker = ThemeGroup:AddColorPicker("BackgroundColor", {
+    Text = "Background Color",
+    Default = Library.BackgroundColor,
+})
+ThemeColorPickers.BackgroundColor = BGColorPicker
+
+local MainColorPicker = ThemeGroup:AddColorPicker("MainColor", {
+    Text = "Main Color",
+    Default = Library.MainColor,
+})
+ThemeColorPickers.MainColor = MainColorPicker
+
+local AccentColorPicker = ThemeGroup:AddColorPicker("AccentColor", {
+    Text = "Accent Color",
+    Default = Library.AccentColor,
+})
+ThemeColorPickers.AccentColor = AccentColorPicker
+
+local OutlineColorPicker = ThemeGroup:AddColorPicker("OutlineColor", {
+    Text = "Outline Color",
+    Default = Library.OutlineColor,
+})
+ThemeColorPickers.OutlineColor = OutlineColorPicker
+
+local FontColorPicker = ThemeGroup:AddColorPicker("FontColor", {
+    Text = "Font Color",
+    Default = Library.FontColor,
+})
+ThemeColorPickers.FontColor = FontColorPicker
+
+local function ApplyTheme()
+    Library.BackgroundColor = ThemeColorPickers.BackgroundColor.Value
+    Library.MainColor = ThemeColorPickers.MainColor.Value
+    Library.AccentColor = ThemeColorPickers.AccentColor.Value
+    Library.OutlineColor = ThemeColorPickers.OutlineColor.Value
+    Library.FontColor = ThemeColorPickers.FontColor.Value
+    Library.AccentColorDark = Library:GetDarkerColor(Library.AccentColor)
+    Library:UpdateColorsUsingRegistry()
+end
+
+BGColorPicker:OnChanged(function() ApplyTheme() end)
+MainColorPicker:OnChanged(function() ApplyTheme() end)
+AccentColorPicker:OnChanged(function() ApplyTheme() end)
+OutlineColorPicker:OnChanged(function() ApplyTheme() end)
+FontColorPicker:OnChanged(function() ApplyTheme() end)
+
+-- // Self-contained config saving. This does NOT rely on the global
+-- // Options/Toggles tables (other scripts that load LinoriaLib overwrite
+-- // them), so the config buttons always work.
 local HttpService = game:GetService("HttpService")
 local CONFIG_FOLDER = "BlockSpinLegit/Configs/settings"
 
@@ -750,13 +1179,19 @@ end
 local SaveToggles = {
     Enabled = EnabledToggle,
     TeamCheck = TeamCheckToggle,
+    WallCheck = WallCheckToggle,
+    SilentAim = SilentAimToggle,
     ESPEnabled = ESPToggle,
     ESPBoxes = ESPBoxesToggle,
     ESPName = ESPNameToggle,
     ESPHealth = ESPHealthToggle,
+    ESPHealthText = ESPHealthTextToggle,
+    ESPTracers = ESPTracerToggle,
     ESPTeamCheck = ESPTeamCheckToggle,
+    ESPChams = ESPChamsToggle,
     CarPVP = CarPVPToggle,
     InventoryChecker = InvCheckerToggle,
+    PanicKey = PanicKeyToggle,
 }
 
 local SaveOptions = {
@@ -766,8 +1201,17 @@ local SaveOptions = {
     Smoothness = SmoothnessSlider,
     MaxDistance = MaxDistanceSlider,
     Prediction = PredictionSlider,
+    Priority = PriorityDropdown,
+    SilentAimFOV = SilentAimFOVSlider,
+    ESPBoxStyle = ESPBoxStyleDropdown,
     ESPDistance = ESPDistanceSlider,
     ESPColor = ESPColorPicker,
+    ESPChamsColor = ESPChamsColorPicker,
+    BackgroundColor = BGColorPicker,
+    MainColor = MainColorPicker,
+    AccentColor = AccentColorPicker,
+    OutlineColor = OutlineColorPicker,
+    FontColor = FontColorPicker,
 }
 
 local ConfigGroup = Tabs["UI Settings"]:AddRightGroupbox("Configuration")
@@ -867,6 +1311,7 @@ local function LoadConfig(Name)
         end
     end
 
+    ApplyTheme()
     Library:Notify(string.format('Loaded config "%s"', Name), 3)
 end
 
