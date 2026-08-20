@@ -245,39 +245,59 @@ if VALID_KEYS[userEnteredKey] then
         Default = true,
     })
 
-    -- // FOV Circle & Target Marker (Drawing API)
-    local FOVCircle = nil
-    local fovOk, fovErr = pcall(function()
-        FOVCircle = Drawing.new("Circle")
-        FOVCircle.Thickness = 1.5
-        FOVCircle.NumSides = 64
-        FOVCircle.Radius = FOVSlider.Value
-        FOVCircle.Filled = false
-        FOVCircle.Transparency = 0.8
-        FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-        FOVCircle.Visible = false
-    end)
-    if not fovOk then
-        warn("[Pancake Hub] FOV Circle Drawing failed: " .. tostring(fovErr))
-        warn("[Pancake Hub] Your executor may not support Drawing.new('Circle')")
-    else
-        print("[Pancake Hub] FOV Circle created successfully")
-    end
+    -- // FOV Circle & Target Marker (Instance-based — no Drawing API needed)
+    local FOVGui = Instance.new("ScreenGui")
+    FOVGui.Name = "PancakeFOV"
+    FOVGui.ResetOnSpawn = false
+    FOVGui.DisplayOrder = 999
+    FOVGui.Parent = game:GetService("CoreGui")
 
-    local TargetMarker = nil
-    local tmOk, tmErr = pcall(function()
-        TargetMarker = Drawing.new("Circle")
-        TargetMarker.Thickness = 2
-        TargetMarker.NumSides = 40
-        TargetMarker.Radius = 8
-        TargetMarker.Filled = true
-        TargetMarker.Transparency = 0.8
-        TargetMarker.Color = Color3.fromRGB(255, 50, 50)
-        TargetMarker.Visible = false
-    end)
-    if not tmOk then
-        warn("[Pancake Hub] Target Marker Drawing failed: " .. tostring(tmErr))
-    end
+    local FOVFrame = Instance.new("Frame")
+    FOVFrame.Name = "FOVCircle"
+    FOVFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    FOVFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    FOVFrame.Size = UDim2.new(0, FOVSlider.Value * 2, 0, FOVSlider.Value * 2)
+    FOVFrame.BackgroundTransparency = 1
+    FOVFrame.BorderSizePixel = 0
+    FOVFrame.Parent = FOVGui
+
+    local FOVCorner = Instance.new("UICorner")
+    FOVCorner.CornerRadius = UDim.new(1, 0)
+    FOVCorner.Parent = FOVFrame
+
+    local FOVStroke = Instance.new("UIStroke")
+    FOVStroke.Color = Color3.fromRGB(255, 255, 255)
+    FOVStroke.Thickness = 1.5
+    FOVStroke.Transparency = 0.2
+    FOVStroke.Parent = FOVFrame
+
+    FOVFrame.Visible = false
+
+    -- Target marker
+    local MarkerGui = Instance.new("ScreenGui")
+    MarkerGui.Name = "PancakeMarker"
+    MarkerGui.ResetOnSpawn = false
+    MarkerGui.DisplayOrder = 999
+    MarkerGui.Parent = game:GetService("CoreGui")
+
+    local MarkerFrame = Instance.new("Frame")
+    MarkerFrame.Name = "TargetDot"
+    MarkerFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    MarkerFrame.Size = UDim2.new(0, 10, 0, 10)
+    MarkerFrame.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+    MarkerFrame.BorderSizePixel = 0
+    MarkerFrame.Parent = MarkerGui
+
+    local MarkerCorner = Instance.new("UICorner")
+    MarkerCorner.CornerRadius = UDim.new(1, 0)
+    MarkerCorner.Parent = MarkerFrame
+
+    local MarkerStroke = Instance.new("UIStroke")
+    MarkerStroke.Color = Color3.new(0, 0, 0)
+    MarkerStroke.Thickness = 1
+    MarkerStroke.Parent = MarkerFrame
+
+    MarkerFrame.Visible = false
 
     -- // Helpers
     local function GetCharacter(Player)
@@ -398,16 +418,14 @@ if VALID_KEYS[userEnteredKey] then
         local ViewportCenter = Camera.ViewportSize / 2
 
         -- Update FOV circle
-        if FOVCircle then
-            FOVCircle.Position = ViewportCenter
-            FOVCircle.Radius = FOVSlider.Value
-            FOVCircle.Visible = ShowFOVToggle.Value
-        end
+        FOVFrame.Size = UDim2.new(0, FOVSlider.Value * 2, 0, FOVSlider.Value * 2)
+        FOVFrame.Visible = ShowFOVToggle.Value
+        FOVStroke.Color = ESP_CURRENT_COLOR
 
         if (not Active) then
             CurrentTarget = nil
             LockedPart = nil
-            if TargetMarker then TargetMarker.Visible = false end
+            MarkerFrame.Visible = false
             return
         end
 
@@ -415,7 +433,7 @@ if VALID_KEYS[userEnteredKey] then
         if #list == 0 then
             CurrentTarget = nil
             LockedPart = nil
-            if TargetMarker then TargetMarker.Visible = false end
+            MarkerFrame.Visible = false
             return
         end
 
@@ -423,7 +441,7 @@ if VALID_KEYS[userEnteredKey] then
         if not best then
             CurrentTarget = nil
             LockedPart = nil
-            if TargetMarker then TargetMarker.Visible = false end
+            MarkerFrame.Visible = false
             return
         end
 
@@ -450,16 +468,16 @@ if VALID_KEYS[userEnteredKey] then
         end
 
         -- Target marker
-        if TargetMarker and ShowTargetToggle.Value then
+        if ShowTargetToggle.Value then
             local sp, OnScreen = Camera:WorldToScreenPoint(Point)
             if OnScreen then
-                TargetMarker.Position = Vector2.new(sp.X, sp.Y)
-                TargetMarker.Visible = true
+                MarkerFrame.Position = UDim2.new(0, sp.X, 0, sp.Y)
+                MarkerFrame.Visible = true
             else
-                TargetMarker.Visible = false
+                MarkerFrame.Visible = false
             end
-        elseif TargetMarker then
-            TargetMarker.Visible = false
+        else
+            MarkerFrame.Visible = false
         end
     end)
 
@@ -984,7 +1002,7 @@ if VALID_KEYS[userEnteredKey] then
                 if data.NameLabel then data.NameLabel.TextColor3 = preset end
                 if data.Highlight then data.Highlight.OutlineColor = preset end
             end
-            if FOVCircle then FOVCircle.Color = preset end
+            if FOVStroke then FOVStroke.Color = preset end
         end
     end)
 
