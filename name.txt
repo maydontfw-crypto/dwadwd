@@ -6,7 +6,7 @@ local userEnteredKey = tostring(_G.script_key or ""):gsub("%s", "")
 
 -- Allowed Key List
 local VALID_KEYS = {
-    ["PANCAKE-NEXUS-2026"] = true,
+    ["PANCAKE-NEXUS-20267"] = true,
     ["PANCAKE-GOLD-9982"]  = true,
     ["XENO-ADMIN-VOID"]    = true,
 }
@@ -504,139 +504,221 @@ if VALID_KEYS[userEnteredKey] then
         local Entry = ESPCache[Player]
         if (not Entry) then
             Entry = {
+                BoxOutline = Drawing.new("Square"),
                 Box = Drawing.new("Square"),
                 Name = Drawing.new("Text"),
-                Health = Drawing.new("Text"),
+                HealthBG = Drawing.new("Square"),
+                HealthBar = Drawing.new("Square"),
+                HealthText = Drawing.new("Text"),
                 Dist = Drawing.new("Text"),
+                Tracer = Drawing.new("Line"),
             }
 
-            Entry.Box.Thickness = 1
-            Entry.Box.Transparency = 1
-            Entry.Box.Color = Color3.fromRGB(0, 255, 0)
+            local bo = Entry.BoxOutline
+            bo.Filled = false
+            bo.Thickness = 3
+            bo.Transparency = 0.6
+            bo.Color = Color3.new(0, 0, 0)
 
-            Entry.Name.Center = true
-            Entry.Name.Outline = true
-            Entry.Name.OutlineColor = Color3.new(0, 0, 0)
-            Entry.Name.Size = 13
+            local b = Entry.Box
+            b.Filled = false
+            b.Thickness = 1
+            b.Transparency = 1
+            b.Color = Color3.fromRGB(0, 255, 0)
 
-            Entry.Health.Center = true
-            Entry.Health.Outline = true
-            Entry.Health.OutlineColor = Color3.new(0, 0, 0)
-            Entry.Health.Size = 12
+            local hb = Entry.HealthBG
+            hb.Filled = true
+            hb.Thickness = 1
+            hb.Color = Color3.new(0, 0, 0)
+            hb.Transparency = 0.5
 
-            Entry.Dist.Center = true
-            Entry.Dist.Outline = true
-            Entry.Dist.OutlineColor = Color3.new(0, 0, 0)
-            Entry.Dist.Size = 12
+            local h = Entry.HealthBar
+            h.Filled = true
+            h.Thickness = 1
+            h.Transparency = 1
+            h.Color = Color3.fromRGB(0, 255, 0)
+
+            local n = Entry.Name
+            n.Center = true
+            n.Outline = true
+            n.OutlineColor = Color3.new(0, 0, 0)
+            n.Size = 13
+
+            local ht = Entry.HealthText
+            ht.Center = true
+            ht.Outline = true
+            ht.OutlineColor = Color3.new(0, 0, 0)
+            ht.Size = 12
+
+            local d = Entry.Dist
+            d.Center = true
+            d.Outline = true
+            d.OutlineColor = Color3.new(0, 0, 0)
+            d.Size = 12
+
+            local t = Entry.Tracer
+            t.Thickness = 1
+            t.Transparency = 0.6
+            t.Color = Color3.fromRGB(0, 255, 0)
 
             ESPCache[Player] = Entry
         end
         return Entry
     end
 
+    local function HideESP(entry)
+        if not entry then return end
+        pcall(function()
+            entry.BoxOutline.Visible = false
+            entry.Box.Visible = false
+            entry.Name.Visible = false
+            entry.HealthBG.Visible = false
+            entry.HealthBar.Visible = false
+            entry.HealthText.Visible = false
+            entry.Dist.Visible = false
+            entry.Tracer.Visible = false
+        end)
+    end
+
     Players.PlayerRemoving:Connect(function(Player)
         local Entry = ESPCache[Player]
         if (Entry) then
-            Entry.Box:Remove()
-            Entry.Name:Remove()
-            Entry.Health:Remove()
-            Entry.Dist:Remove()
+            pcall(function()
+                Entry.BoxOutline:Remove()
+                Entry.Box:Remove()
+                Entry.Name:Remove()
+                Entry.HealthBG:Remove()
+                Entry.HealthBar:Remove()
+                Entry.HealthText:Remove()
+                Entry.Dist:Remove()
+                Entry.Tracer:Remove()
+            end)
             ESPCache[Player] = nil
         end
     end)
 
-    RunService:BindToRenderStep("BlockSpinESP", Enum.RenderPriority.Character.Value, function()
-        Camera = Workspace.CurrentCamera
-        if not Camera then return end
+    RunService:BindToRenderStep("BlockSpinESP", Enum.RenderPriority.Character.Value + 1, function()
+        pcall(function()
+            Camera = Workspace.CurrentCamera
+            if not Camera then return end
 
-        local Enabled = ESPToggle.Value
-        local MaxDist = ESPDistanceSlider.Value
+            local Enabled = ESPToggle.Value
+            local MaxDist = ESPDistanceSlider.Value
+            local ViewportSize = Camera.ViewportSize
 
-        for _, Player in ipairs(Players:GetPlayers()) do
-            if (Player == LocalPlayer) then
-                local SelfEntry = ESPCache[Player]
-                if (SelfEntry) then
-                    SelfEntry.Box.Visible = false
-                    SelfEntry.Name.Visible = false
-                    SelfEntry.Health.Visible = false
-                    SelfEntry.Dist.Visible = false
+            for _, Player in ipairs(Players:GetPlayers()) do
+                if (Player == LocalPlayer) then
+                    HideESP(ESPCache[Player])
+                    continue
                 end
-                continue
-            end
 
-            local Entry = EnsureESP(Player)
-            local Character = Player.Character
-            local RootPart = Character and Character:FindFirstChild("HumanoidRootPart")
-            local Head = Character and Character:FindFirstChild("Head")
-            local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
-            local Show = false
+                local Entry = EnsureESP(Player)
+                local Character = Player.Character
+                local RootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+                local Head = Character and Character:FindFirstChild("Head")
+                local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+                local Show = false
 
-            if (Enabled and RootPart and Head and Humanoid and Humanoid.Health > 0) then
-                local IsTeammateCheck = LocalPlayer.Team and Player.Team and Player.Team == LocalPlayer.Team
-                if (not (ESPTeamCheckToggle.Value and IsTeammateCheck)) then
-                    local Range = (RootPart.Position - Camera.CFrame.Position).Magnitude
-                    if (Range <= MaxDist) then
-                        local ScreenHead, OnHead = Camera:WorldToScreenPoint(Head.Position)
-                        if (OnHead) then
-                            local HeadTop = Head.Position + Head.CFrame.UpVector * (Head.Size.Y / 2)
-                            local Feet = RootPart.Position - RootPart.CFrame.UpVector * (RootPart.Size.Y / 2)
-                            local ScreenTop, OnTop = Camera:WorldToScreenPoint(HeadTop)
-                            local ScreenFeet, OnFeet = Camera:WorldToScreenPoint(Feet)
+                if (Enabled and RootPart and Head and Humanoid and Humanoid.Health > 0) then
+                    local IsTeammateCheck = LocalPlayer.Team and Player.Team and Player.Team == LocalPlayer.Team
+                    if (not (ESPTeamCheckToggle.Value and IsTeammateCheck)) then
+                        local Range = (RootPart.Position - Camera.CFrame.Position).Magnitude
+                        if (Range <= MaxDist) then
+                            local RootPos = RootPart.Position
+                            local HeadPos = Head.Position + Vector3.new(0, Head.Size.Y * 0.5, 0)
+                            local LegPos = RootPos - Vector3.new(0, 3, 0)
 
-                            if (OnTop and OnFeet) then
-                                local Height = math.abs(ScreenFeet.Y - ScreenTop.Y)
+                            local RootScreen, RootOn = Camera:WorldToViewportPoint(RootPos)
+                            local HeadScreen, HeadOn = Camera:WorldToViewportPoint(HeadPos)
+                            local LegScreen, LegOn = Camera:WorldToViewportPoint(LegPos)
+
+                            if RootOn or HeadOn or LegOn then
+                                local TopY = math.min(HeadScreen.Y, RootScreen.Y, LegScreen.Y)
+                                local BotY = math.max(HeadScreen.Y, RootScreen.Y, LegScreen.Y)
+                                local CenterX = RootScreen.X
+                                local Height = math.abs(BotY - TopY)
                                 local Width = Height * 0.6
-                                local TopY = math.min(ScreenTop.Y, ScreenFeet.Y)
-                                local BottomY = math.max(ScreenTop.Y, ScreenFeet.Y)
-                                local CenterX = (ScreenTop.X + ScreenFeet.X) / 2
+
+                                if Height < 4 then
+                                    HideESP(Entry)
+                                    continue
+                                end
+
+                                local BoxX = CenterX - Width / 2
+                                local BoxY = TopY
+                                local Col = IsTeammateCheck and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(0, 255, 0)
 
                                 if (ESPBoxesToggle.Value) then
+                                    Entry.BoxOutline.Visible = true
+                                    Entry.BoxOutline.Position = Vector2.new(BoxX - 1, BoxY - 1)
+                                    Entry.BoxOutline.Size = Vector2.new(Width + 2, Height + 2)
+
                                     Entry.Box.Visible = true
-                                    Entry.Box.Color = IsTeammateCheck and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(0, 255, 0)
-                                    Entry.Box.Position = Vector2.new(CenterX - Width / 2, TopY)
+                                    Entry.Box.Color = Col
+                                    Entry.Box.Position = Vector2.new(BoxX, BoxY)
                                     Entry.Box.Size = Vector2.new(Width, Height)
                                 else
+                                    Entry.BoxOutline.Visible = false
                                     Entry.Box.Visible = false
                                 end
 
                                 if (ESPNameToggle.Value) then
                                     Entry.Name.Visible = true
                                     Entry.Name.Text = Player.Name
-                                    Entry.Name.Position = Vector2.new(CenterX, TopY - 15)
+                                    Entry.Name.Position = Vector2.new(CenterX, BoxY - 16)
                                 else
                                     Entry.Name.Visible = false
                                 end
 
                                 if (ESPHealthToggle.Value) then
-                                    Entry.Health.Visible = true
-                                    Entry.Health.Text = string.format("%d/%d", math.floor(Humanoid.Health), math.floor(Humanoid.MaxHealth))
-                                    Entry.Health.Position = Vector2.new(CenterX, BottomY + 2)
+                                    local pct = math.clamp(Humanoid.Health / Humanoid.MaxHealth, 0, 1)
+                                    local barH = math.max(Height * pct, 1)
+                                    local barW = 3
+                                    local barX = BoxX - 7
+
+                                    Entry.HealthBG.Visible = true
+                                    Entry.HealthBG.Position = Vector2.new(barX, BoxY)
+                                    Entry.HealthBG.Size = Vector2.new(barW, Height)
+
+                                    Entry.HealthBar.Visible = true
+                                    Entry.HealthBar.Color = Color3.fromRGB(0, 255, 0):Lerp(Color3.fromRGB(255, 40, 40), 1 - pct)
+                                    Entry.HealthBar.Position = Vector2.new(barX, BoxY + (Height - barH))
+                                    Entry.HealthBar.Size = Vector2.new(barW, barH)
+
+                                    Entry.HealthText.Visible = true
+                                    Entry.HealthText.Text = string.format("%d", math.floor(Humanoid.Health))
+                                    Entry.HealthText.Position = Vector2.new(barX, BoxY + Height + 2)
                                 else
-                                    Entry.Health.Visible = false
+                                    Entry.HealthBG.Visible = false
+                                    Entry.HealthBar.Visible = false
+                                    Entry.HealthText.Visible = false
                                 end
 
                                 if (ESPDistanceToggle.Value) then
                                     Entry.Dist.Visible = true
                                     Entry.Dist.Text = string.format("[%dm]", math.floor(Range + 0.5))
-                                    Entry.Dist.Position = Vector2.new(CenterX, BottomY + 16)
+                                    Entry.Dist.Position = Vector2.new(CenterX, BoxY + Height + (ESPHealthToggle.Value and 16 or 2))
                                 else
                                     Entry.Dist.Visible = false
                                 end
+
+                                local TracerFrom = Vector2.new(ViewportSize.X / 2, ViewportSize.Y)
+                                Entry.Tracer.Visible = true
+                                Entry.Tracer.From = TracerFrom
+                                Entry.Tracer.To = Vector2.new(RootScreen.X, math.min(RootScreen.Y, BotY))
+                                Entry.Tracer.Color = Col
 
                                 Show = true
                             end
                         end
                     end
                 end
-            end
 
-            if (not Show) then
-                Entry.Box.Visible = false
-                Entry.Name.Visible = false
-                Entry.Health.Visible = false
-                Entry.Dist.Visible = false
+                if (not Show) then
+                    HideESP(Entry)
+                end
             end
-        end
+        end)
     end)
 
     -- ==========================================================
