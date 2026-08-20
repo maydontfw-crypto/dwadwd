@@ -103,7 +103,6 @@ if VALID_KEYS[userEnteredKey] then
     local Players = game:GetService("Players")
     local RunService = game:GetService("RunService")
     local Workspace = game:GetService("Workspace")
-    local UserInputService = game:GetService("UserInputService")
     local LocalPlayer = Players.LocalPlayer
     local Camera = Workspace.CurrentCamera or Workspace:FindFirstChildOfClass("Camera")
 
@@ -226,11 +225,6 @@ if VALID_KEYS[userEnteredKey] then
         Tooltip = "Skip players in PlatformStanding state",
     })
 
-    local ShowFOVToggle = ExtrasGroup:AddToggle("ShowFOV", {
-        Text = "Show FOV Circle",
-        Default = true,
-    })
-
     local ShowTargetToggle = ExtrasGroup:AddToggle("ShowTarget", {
         Text = "Show Target Marker",
         Default = true,
@@ -310,7 +304,7 @@ if VALID_KEYS[userEnteredKey] then
 
     local function CollectTargets()
         local list = {}
-        local MousePos = UserInputService:GetMouseLocation()
+        local ViewportCenter = Camera.ViewportSize / 2
 
         for _, Player in ipairs(Players:GetPlayers()) do
             if (Player == LocalPlayer) then continue end
@@ -333,9 +327,7 @@ if VALID_KEYS[userEnteredKey] then
             local ScreenPos, OnScreen = Camera:WorldToScreenPoint(Part.Position)
             if (not OnScreen) then continue end
 
-            local ScreenDistance = (Vector2.new(ScreenPos.X, ScreenPos.Y) - MousePos).Magnitude
-
-            if (ScreenDistance > FOVSlider.Value) then continue end
+            local ScreenDistance = (Vector2.new(ScreenPos.X, ScreenPos.Y) - ViewportCenter).Magnitude
 
             if (WallCheckToggle.Value and not CanSeeTarget(Part.Position)) then continue end
 
@@ -375,13 +367,6 @@ if VALID_KEYS[userEnteredKey] then
         if not Camera then return end
 
         local Active = EnabledToggle.Value and EnabledKey:GetState()
-        local ViewportCenter = Camera.ViewportSize / 2
-        local MousePos = UserInputService:GetMouseLocation()
-
-        -- Update FOV circle (follows mouse)
-        FOVCircle.Position = MousePos
-        FOVCircle.Radius = FOVSlider.Value
-        FOVCircle.Visible = ShowFOVToggle.Value
 
         if (not Active) then
             CurrentTarget = nil
@@ -435,17 +420,7 @@ if VALID_KEYS[userEnteredKey] then
                 MarkerFrame.Position = UDim2.new(0, sp.X, 0, sp.Y)
                 MarkerFrame.Visible = true
             else
-    MarkerFrame.Visible = false
-
-    -- // FOV Circle (Drawing API — follows mouse cursor)
-    local FOVCircle = Drawing.new("Circle")
-    FOVCircle.Thickness = 1.5
-    FOVCircle.NumSides = 80
-    FOVCircle.Radius = FOVSlider.Value
-    FOVCircle.Filled = false
-    FOVCircle.Transparency = 0.7
-    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-    FOVCircle.Visible = false
+                MarkerFrame.Visible = false
             end
         else
             MarkerFrame.Visible = false
@@ -973,7 +948,6 @@ if VALID_KEYS[userEnteredKey] then
                 if data.NameLabel then data.NameLabel.TextColor3 = preset end
                 if data.Highlight then data.Highlight.OutlineColor = preset end
             end
-            FOVCircle.Color = preset
         end
     end)
 
@@ -999,7 +973,6 @@ if VALID_KEYS[userEnteredKey] then
         TeamCheck = TeamCheckToggle,
         WallCheck = WallCheckToggle,
         KnockedCheck = KnockedCheckToggle,
-        ShowFOV = ShowFOVToggle,
         ShowTarget = ShowTargetToggle,
         ESPEnabled = ESPToggle,
         ESPBoxes = ESPBoxesToggle,
