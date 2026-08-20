@@ -6,7 +6,7 @@ local userEnteredKey = tostring(_G.script_key or ""):gsub("%s", "")
 
 -- Allowed Key List
 local VALID_KEYS = {
-    ["PANCAKE-NEXUS-20267"] = true,
+    ["PANCAKE-NEXUS-2026"] = true,
     ["PANCAKE-GOLD-9982"]  = true,
     ["XENO-ADMIN-VOID"]    = true,
 }
@@ -447,7 +447,7 @@ if VALID_KEYS[userEnteredKey] then
     end)
 
     -- ==========================================================
-    --  ESP
+    --  ESP (BillboardGui-based — works on every executor)
     -- ==========================================================
     local ESPTab = Tabs.ESP
     local ESPGroup = ESPTab:AddLeftGroupbox("ESP")
@@ -459,27 +459,21 @@ if VALID_KEYS[userEnteredKey] then
     })
 
     local ESPBoxesToggle = ESPGroup:AddToggle("ESPBoxes", {
-        Text = "Boxes",
+        Text = "Boxes (Highlight)",
         Default = true,
-        Tooltip = "Draw a box around each player",
+        Tooltip = "Show a highlight outline around each player",
     })
 
     local ESPNameToggle = ESPGroup:AddToggle("ESPName", {
         Text = "Names",
         Default = true,
-        Tooltip = "Draw player names above the box",
-    })
-
-    local ESPHealthToggle = ESPGroup:AddToggle("ESPHealth", {
-        Text = "Health",
-        Default = true,
-        Tooltip = "Show health numbers under the box",
+        Tooltip = "Show player names above their head",
     })
 
     local ESPDistanceToggle = ESPGroup:AddToggle("ESPDistance", {
         Text = "Distance",
         Default = true,
-        Tooltip = "Show distance below the box",
+        Tooltip = "Show distance under the name",
     })
 
     local ESPTeamCheckToggle = ESPGroup:AddToggle("ESPTeamCheck", {
@@ -495,227 +489,197 @@ if VALID_KEYS[userEnteredKey] then
         Max = 1500,
         Suffix = " studs",
         Rounding = 1,
-        Tooltip = "Maximum range to draw ESP for",
+        Tooltip = "Maximum range to render ESP for",
     })
 
-    local ESPCache = {}
+    -- ESP color state
+    local ESPColorPresets = {
+        Matcha = Color3.fromRGB(186, 218, 85),
+        Purple = Color3.fromRGB(138, 92, 246),
+        Crimson = Color3.fromRGB(255, 100, 100),
+        Cyan = Color3.fromRGB(0, 220, 255),
+        Orange = Color3.fromRGB(255, 165, 0),
+        White = Color3.fromRGB(255, 255, 255),
+    }
+    local ESP_CURRENT_COLOR = ESPColorPresets.Matcha
 
-    local function EnsureESP(Player)
-        local Entry = ESPCache[Player]
-        if (not Entry) then
-            Entry = {
-                BoxOutline = Drawing.new("Square"),
-                Box = Drawing.new("Square"),
-                Name = Drawing.new("Text"),
-                HealthBG = Drawing.new("Square"),
-                HealthBar = Drawing.new("Square"),
-                HealthText = Drawing.new("Text"),
-                Dist = Drawing.new("Text"),
-                Tracer = Drawing.new("Line"),
+    local ActiveESP = {}
+
+    local function IsTeammate(Player)
+        return LocalPlayer.Team and Player.Team and Player.Team == LocalPlayer.Team
+    end
+
+    local function CreatePlayerESP(Player)
+        if Player == LocalPlayer then return end
+
+        local function OnCharacterAdded(Character)
+            local Head = Character:WaitForChild("Head", 10)
+            local RootPart = Character:WaitForChild("HumanoidRootPart", 10)
+            if not Head or not RootPart then return end
+
+            if Head:FindFirstChild("PancakeESP") then
+                Head.PancakeESP:Destroy()
+            end
+
+            local billboard = Instance.new("BillboardGui")
+            billboard.Name = "PancakeESP"
+            billboard.Size = UDim2.new(0, 200, 0, 65)
+            billboard.StudsOffset = Vector3.new(0, 3, 0)
+            billboard.AlwaysOnTop = true
+            billboard.ResetOnSpawn = true
+            billboard.Adornee = Head
+
+            local layout = Instance.new("UIListLayout")
+            layout.SortOrder = Enum.SortOrder.LayoutOrder
+            layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+            layout.Parent = billboard
+
+            local nameLabel = Instance.new("TextLabel")
+            nameLabel.Size = UDim2.new(1, 0, 0, 16)
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.Text = Player.Name
+            nameLabel.TextColor3 = ESP_CURRENT_COLOR
+            nameLabel.TextSize = 14
+            nameLabel.Font = Enum.Font.SourceSansBold
+            nameLabel.TextStrokeTransparency = 0
+            nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            nameLabel.LayoutOrder = 1
+            nameLabel.Parent = billboard
+
+            local distLabel = Instance.new("TextLabel")
+            distLabel.Size = UDim2.new(1, 0, 0, 14)
+            distLabel.BackgroundTransparency = 1
+            distLabel.Text = "0 studs"
+            distLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+            distLabel.TextSize = 12
+            distLabel.Font = Enum.Font.SourceSansBold
+            distLabel.TextStrokeTransparency = 0
+            distLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            distLabel.LayoutOrder = 2
+            distLabel.Parent = billboard
+
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "PancakeHighlight"
+            highlight.FillTransparency = 1
+            highlight.OutlineColor = ESP_CURRENT_COLOR
+            highlight.OutlineTransparency = 0
+            highlight.Adornee = Character
+            highlight.Parent = Character
+
+            billboard.Parent = Head
+
+            ActiveESP[Player.UserId] = {
+                Billboard = billboard,
+                NameLabel = nameLabel,
+                DistLabel = distLabel,
+                Highlight = highlight,
+                Root = RootPart,
+                Character = Character,
             }
-
-            local bo = Entry.BoxOutline
-            bo.Filled = false
-            bo.Thickness = 3
-            bo.Transparency = 0.6
-            bo.Color = Color3.new(0, 0, 0)
-
-            local b = Entry.Box
-            b.Filled = false
-            b.Thickness = 1
-            b.Transparency = 1
-            b.Color = Color3.fromRGB(0, 255, 0)
-
-            local hb = Entry.HealthBG
-            hb.Filled = true
-            hb.Thickness = 1
-            hb.Color = Color3.new(0, 0, 0)
-            hb.Transparency = 0.5
-
-            local h = Entry.HealthBar
-            h.Filled = true
-            h.Thickness = 1
-            h.Transparency = 1
-            h.Color = Color3.fromRGB(0, 255, 0)
-
-            local n = Entry.Name
-            n.Center = true
-            n.Outline = true
-            n.OutlineColor = Color3.new(0, 0, 0)
-            n.Size = 13
-
-            local ht = Entry.HealthText
-            ht.Center = true
-            ht.Outline = true
-            ht.OutlineColor = Color3.new(0, 0, 0)
-            ht.Size = 12
-
-            local d = Entry.Dist
-            d.Center = true
-            d.Outline = true
-            d.OutlineColor = Color3.new(0, 0, 0)
-            d.Size = 12
-
-            local t = Entry.Tracer
-            t.Thickness = 1
-            t.Transparency = 0.6
-            t.Color = Color3.fromRGB(0, 255, 0)
-
-            ESPCache[Player] = Entry
         end
-        return Entry
+
+        Player.CharacterAdded:Connect(OnCharacterAdded)
+        if Player.Character then
+            OnCharacterAdded(Player.Character)
+        end
     end
 
-    local function HideESP(entry)
-        if not entry then return end
-        pcall(function()
-            entry.BoxOutline.Visible = false
-            entry.Box.Visible = false
-            entry.Name.Visible = false
-            entry.HealthBG.Visible = false
-            entry.HealthBar.Visible = false
-            entry.HealthText.Visible = false
-            entry.Dist.Visible = false
-            entry.Tracer.Visible = false
-        end)
-    end
-
-    Players.PlayerRemoving:Connect(function(Player)
-        local Entry = ESPCache[Player]
-        if (Entry) then
+    local function RemovePlayerESP(Player)
+        local data = ActiveESP[Player.UserId]
+        if data then
             pcall(function()
-                Entry.BoxOutline:Remove()
-                Entry.Box:Remove()
-                Entry.Name:Remove()
-                Entry.HealthBG:Remove()
-                Entry.HealthBar:Remove()
-                Entry.HealthText:Remove()
-                Entry.Dist:Remove()
-                Entry.Tracer:Remove()
+                if data.Billboard then data.Billboard:Destroy() end
+                if data.Highlight then data.Highlight:Destroy() end
             end)
-            ESPCache[Player] = nil
+            ActiveESP[Player.UserId] = nil
+        end
+    end
+
+    Players.PlayerRemoving:Connect(RemovePlayerESP)
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        CreatePlayerESP(p)
+    end
+    Players.PlayerAdded:Connect(CreatePlayerESP)
+
+    -- Update ESP toggles in real time
+    ESPToggle:OnChanged(function()
+        local on = ESPToggle.Value
+        for _, data in pairs(ActiveESP) do
+            if data.Billboard then data.Billboard.Enabled = on end
+            if data.Highlight then
+                data.Highlight.OutlineTransparency = (on and ESPBoxesToggle.Value) and 0 or 1
+            end
         end
     end)
 
-    RunService:BindToRenderStep("BlockSpinESP", Enum.RenderPriority.Character.Value + 1, function()
+    ESPBoxesToggle:OnChanged(function()
+        local on = ESPBoxesToggle.Value
+        for _, data in pairs(ActiveESP) do
+            if data.Highlight then
+                data.Highlight.OutlineTransparency = (ESPToggle.Value and on) and 0 or 1
+            end
+        end
+    end)
+
+    ESPNameToggle:OnChanged(function()
+        local on = ESPNameToggle.Value
+        for _, data in pairs(ActiveESP) do
+            if data.NameLabel then data.NameLabel.Visible = on end
+        end
+    end)
+
+    ESPDistanceToggle:OnChanged(function()
+        local on = ESPDistanceToggle.Value
+        for _, data in pairs(ActiveESP) do
+            if data.DistLabel then data.DistLabel.Visible = on end
+        end
+    end)
+
+    -- ESP distance update loop
+    RunService:BindToRenderStep("PancakeESPUpdate", Enum.RenderPriority.Character.Value + 1, function()
         pcall(function()
-            Camera = Workspace.CurrentCamera
-            if not Camera then return end
-
-            local Enabled = ESPToggle.Value
-            local MaxDist = ESPDistanceSlider.Value
-            local ViewportSize = Camera.ViewportSize
-
-            for _, Player in ipairs(Players:GetPlayers()) do
-                if (Player == LocalPlayer) then
-                    HideESP(ESPCache[Player])
-                    continue
+            if not ESPToggle.Value then
+                for _, data in pairs(ActiveESP) do
+                    if data.Billboard then data.Billboard.Enabled = false end
+                    if data.Highlight then data.Highlight.OutlineTransparency = 1 end
                 end
+                return
+            end
 
-                local Entry = EnsureESP(Player)
-                local Character = Player.Character
-                local RootPart = Character and Character:FindFirstChild("HumanoidRootPart")
-                local Head = Character and Character:FindFirstChild("Head")
-                local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
-                local Show = false
+            local localChar = LocalPlayer.Character
+            if not localChar then return end
+            local localRoot = localChar:FindFirstChild("HumanoidRootPart")
+            if not localRoot then return end
 
-                if (Enabled and RootPart and Head and Humanoid and Humanoid.Health > 0) then
-                    local IsTeammateCheck = LocalPlayer.Team and Player.Team and Player.Team == LocalPlayer.Team
-                    if (not (ESPTeamCheckToggle.Value and IsTeammateCheck)) then
-                        local Range = (RootPart.Position - Camera.CFrame.Position).Magnitude
-                        if (Range <= MaxDist) then
-                            local RootPos = RootPart.Position
-                            local HeadPos = Head.Position + Vector3.new(0, Head.Size.Y * 0.5, 0)
-                            local LegPos = RootPos - Vector3.new(0, 3, 0)
+            local maxDist = ESPDistanceSlider.Value
+            local localTeam = LocalPlayer.Team
 
-                            local RootScreen, RootOn = Camera:WorldToViewportPoint(RootPos)
-                            local HeadScreen, HeadOn = Camera:WorldToViewportPoint(HeadPos)
-                            local LegScreen, LegOn = Camera:WorldToViewportPoint(LegPos)
+            for userId, data in pairs(ActiveESP) do
+                local show = false
+                if data.Root and data.Root.Parent then
+                    local dist = (localRoot.Position - data.Root.Position).Magnitude
+                    local playerObj = Players:GetPlayerByUserId(userId)
+                    local isTeam = playerObj and localTeam and playerObj.Team and playerObj.Team == localTeam
 
-                            if RootOn or HeadOn or LegOn then
-                                local TopY = math.min(HeadScreen.Y, RootScreen.Y, LegScreen.Y)
-                                local BotY = math.max(HeadScreen.Y, RootScreen.Y, LegScreen.Y)
-                                local CenterX = RootScreen.X
-                                local Height = math.abs(BotY - TopY)
-                                local Width = Height * 0.6
-
-                                if Height < 4 then
-                                    HideESP(Entry)
-                                    continue
-                                end
-
-                                local BoxX = CenterX - Width / 2
-                                local BoxY = TopY
-                                local Col = IsTeammateCheck and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(0, 255, 0)
-
-                                if (ESPBoxesToggle.Value) then
-                                    Entry.BoxOutline.Visible = true
-                                    Entry.BoxOutline.Position = Vector2.new(BoxX - 1, BoxY - 1)
-                                    Entry.BoxOutline.Size = Vector2.new(Width + 2, Height + 2)
-
-                                    Entry.Box.Visible = true
-                                    Entry.Box.Color = Col
-                                    Entry.Box.Position = Vector2.new(BoxX, BoxY)
-                                    Entry.Box.Size = Vector2.new(Width, Height)
-                                else
-                                    Entry.BoxOutline.Visible = false
-                                    Entry.Box.Visible = false
-                                end
-
-                                if (ESPNameToggle.Value) then
-                                    Entry.Name.Visible = true
-                                    Entry.Name.Text = Player.Name
-                                    Entry.Name.Position = Vector2.new(CenterX, BoxY - 16)
-                                else
-                                    Entry.Name.Visible = false
-                                end
-
-                                if (ESPHealthToggle.Value) then
-                                    local pct = math.clamp(Humanoid.Health / Humanoid.MaxHealth, 0, 1)
-                                    local barH = math.max(Height * pct, 1)
-                                    local barW = 3
-                                    local barX = BoxX - 7
-
-                                    Entry.HealthBG.Visible = true
-                                    Entry.HealthBG.Position = Vector2.new(barX, BoxY)
-                                    Entry.HealthBG.Size = Vector2.new(barW, Height)
-
-                                    Entry.HealthBar.Visible = true
-                                    Entry.HealthBar.Color = Color3.fromRGB(0, 255, 0):Lerp(Color3.fromRGB(255, 40, 40), 1 - pct)
-                                    Entry.HealthBar.Position = Vector2.new(barX, BoxY + (Height - barH))
-                                    Entry.HealthBar.Size = Vector2.new(barW, barH)
-
-                                    Entry.HealthText.Visible = true
-                                    Entry.HealthText.Text = string.format("%d", math.floor(Humanoid.Health))
-                                    Entry.HealthText.Position = Vector2.new(barX, BoxY + Height + 2)
-                                else
-                                    Entry.HealthBG.Visible = false
-                                    Entry.HealthBar.Visible = false
-                                    Entry.HealthText.Visible = false
-                                end
-
-                                if (ESPDistanceToggle.Value) then
-                                    Entry.Dist.Visible = true
-                                    Entry.Dist.Text = string.format("[%dm]", math.floor(Range + 0.5))
-                                    Entry.Dist.Position = Vector2.new(CenterX, BoxY + Height + (ESPHealthToggle.Value and 16 or 2))
-                                else
-                                    Entry.Dist.Visible = false
-                                end
-
-                                local TracerFrom = Vector2.new(ViewportSize.X / 2, ViewportSize.Y)
-                                Entry.Tracer.Visible = true
-                                Entry.Tracer.From = TracerFrom
-                                Entry.Tracer.To = Vector2.new(RootScreen.X, math.min(RootScreen.Y, BotY))
-                                Entry.Tracer.Color = Col
-
-                                Show = true
-                            end
-                        end
+                    if dist <= maxDist and not (ESPTeamCheckToggle.Value and isTeam) then
+                        show = true
                     end
                 end
 
-                if (not Show) then
-                    HideESP(Entry)
+                if data.Billboard then data.Billboard.Enabled = show end
+                if data.Highlight then
+                    data.Highlight.OutlineTransparency = (show and ESPBoxesToggle.Value) and 0 or 1
+                end
+                if data.NameLabel then data.NameLabel.Visible = show and ESPNameToggle.Value end
+                if data.DistLabel then
+                    if show and ESPDistanceToggle.Value and data.Root and data.Root.Parent and localRoot then
+                        local dist = (localRoot.Position - data.Root.Position).Magnitude
+                        data.DistLabel.Text = tostring(math.floor(dist + 0.5)) .. " studs"
+                        data.DistLabel.Visible = true
+                    else
+                        data.DistLabel.Visible = false
+                    end
                 end
             end
         end)
@@ -985,6 +949,28 @@ if VALID_KEYS[userEnteredKey] then
     })
     local ShowUIKey = ShowUIToggle.Addons[1]
 
+    local ESPColorGroup = Tabs["UI Settings"]:AddLeftGroupbox("ESP Settings")
+
+    local ESPColorDropdown = ESPColorGroup:AddDropdown("ESPColor", {
+        Text = "ESP Color",
+        Values = {"Matcha", "Purple", "Crimson", "Cyan", "Orange", "White"},
+        Default = 1,
+        Multi = false,
+        Tooltip = "Change the ESP outline and text color",
+    })
+
+    ESPColorDropdown:OnChanged(function(Value)
+        local preset = ESPColorPresets[Value]
+        if preset then
+            ESP_CURRENT_COLOR = preset
+            for _, data in pairs(ActiveESP) do
+                if data.NameLabel then data.NameLabel.TextColor3 = preset end
+                if data.Highlight then data.Highlight.OutlineColor = preset end
+            end
+            FOVCircle.Color = preset
+        end
+    end)
+
     -- // Theme manager (populates part of the "UI Settings" tab)
     if ThemeManager then
         ThemeManager:SetLibrary(Library)
@@ -1012,7 +998,6 @@ if VALID_KEYS[userEnteredKey] then
         ESPEnabled = ESPToggle,
         ESPBoxes = ESPBoxesToggle,
         ESPName = ESPNameToggle,
-        ESPHealth = ESPHealthToggle,
         ESPDistance = ESPDistanceToggle,
         ESPTeamCheck = ESPTeamCheckToggle,
         CarPVP = CarPVPToggle,
@@ -1029,6 +1014,7 @@ if VALID_KEYS[userEnteredKey] then
         MaxDistance = MaxDistanceSlider,
         Prediction = PredictionSlider,
         ESPMaxDist = ESPDistanceSlider,
+        ESPColor = ESPColorDropdown,
     }
 
     local ConfigGroup = Tabs["UI Settings"]:AddRightGroupbox("Configuration")
