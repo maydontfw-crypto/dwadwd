@@ -6,7 +6,7 @@ local userEnteredKey = tostring(_G.script_key or ""):gsub("%s", "")
 
 -- Allowed Key List
 local VALID_KEYS = {
-    ["PANCAKE-NEXUS-20267"] = true,
+    ["PANCAKE-NEXUS-2026"] = true,
     ["PANCAKE-GOLD-9982"]  = true,
     ["XENO-ADMIN-VOID"]    = true,
 }
@@ -97,7 +97,7 @@ if VALID_KEYS[userEnteredKey] then
 
     -- // Dependencies (LinoriaLib UI)
     local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/LinoriaLib/main/Library.lua"))()
-    local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/LinoriaLib/main/addons/ThemeManager.lua"))()
+    local ThemeManager = nil
 
     -- // Services
     local Players = game:GetService("Players")
@@ -904,9 +904,11 @@ if VALID_KEYS[userEnteredKey] then
     local ShowUIKey = ShowUIToggle.Addons[1]
 
     -- // Theme manager (populates part of the "UI Settings" tab)
-    ThemeManager:SetLibrary(Library)
-    ThemeManager:SetFolder("BlockSpinLegit")
-    ThemeManager:ApplyToTab(Tabs["UI Settings"])
+    if ThemeManager then
+        ThemeManager:SetLibrary(Library)
+        ThemeManager:SetFolder("BlockSpinLegit")
+        ThemeManager:ApplyToTab(Tabs["UI Settings"])
+    end
 
     -- // Config saving
     local HttpService = game:GetService("HttpService")
