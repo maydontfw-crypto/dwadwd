@@ -62,6 +62,7 @@ if VALID_KEYS[userEnteredKey] then
     print("[SUCCESS]: Key validated. Running protected payload...")
 
     local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/LinoriaLib/main/Library.lua"))()
+    local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/LinoriaLib/main/addons/ThemeManager.lua"))()
     local Players = game:GetService("Players")
     local RunService = game:GetService("RunService")
     local Workspace = game:GetService("Workspace")
@@ -711,7 +712,9 @@ if VALID_KEYS[userEnteredKey] then
         SyncToggleState = true, Mode = "Toggle", Modes = {"Toggle"},
         IgnoreProcessedCheck = true,
     })
+    local ShowUIKey = ShowUIToggle.Addons[1]
 
+    -- // Panic Key
     local PanicKeyGroup = Tabs["UI Settings"]:AddLeftGroupbox("Safety")
 
     local PanicKeyToggle = PanicKeyGroup:AddToggle("PanicKey", {
@@ -748,45 +751,10 @@ if VALID_KEYS[userEnteredKey] then
         end
     end)
 
-    -- // ====== THEME ======
-    local ThemeGroup = Tabs["UI Settings"]:AddRightGroupbox("Theme")
-    local ThemeColorPickers = {}
-
-    local BGColorPicker = ThemeGroup:AddColorPicker("BackgroundColor", {
-        Text = "Background Color", Default = Library.BackgroundColor })
-    ThemeColorPickers.BackgroundColor = BGColorPicker
-
-    local MainColorPicker = ThemeGroup:AddColorPicker("MainColor", {
-        Text = "Main Color", Default = Library.MainColor })
-    ThemeColorPickers.MainColor = MainColorPicker
-
-    local AccentColorPicker = ThemeGroup:AddColorPicker("AccentColor", {
-        Text = "Accent Color", Default = Library.AccentColor })
-    ThemeColorPickers.AccentColor = AccentColorPicker
-
-    local OutlineColorPicker = ThemeGroup:AddColorPicker("OutlineColor", {
-        Text = "Outline Color", Default = Library.OutlineColor })
-    ThemeColorPickers.OutlineColor = OutlineColorPicker
-
-    local FontColorPicker = ThemeGroup:AddColorPicker("FontColor", {
-        Text = "Font Color", Default = Library.FontColor })
-    ThemeColorPickers.FontColor = FontColorPicker
-
-    local function ApplyTheme()
-        Library.BackgroundColor = ThemeColorPickers.BackgroundColor.Value
-        Library.MainColor = ThemeColorPickers.MainColor.Value
-        Library.AccentColor = ThemeColorPickers.AccentColor.Value
-        Library.OutlineColor = ThemeColorPickers.OutlineColor.Value
-        Library.FontColor = ThemeColorPickers.FontColor.Value
-        Library.AccentColorDark = Library:GetDarkerColor(Library.AccentColor)
-        Library:UpdateColorsUsingRegistry()
-    end
-
-    BGColorPicker:OnChanged(ApplyTheme)
-    MainColorPicker:OnChanged(ApplyTheme)
-    AccentColorPicker:OnChanged(ApplyTheme)
-    OutlineColorPicker:OnChanged(ApplyTheme)
-    FontColorPicker:OnChanged(ApplyTheme)
+    -- // Theme (ThemeManager)
+    ThemeManager:SetLibrary(Library)
+    ThemeManager:SetFolder("BlockSpinLegit")
+    ThemeManager:ApplyToTab(Tabs["UI Settings"])
 
     -- // ====== CONFIG SYSTEM ======
     local HttpService = game:GetService("HttpService")
@@ -808,8 +776,6 @@ if VALID_KEYS[userEnteredKey] then
         Smoothness = SmoothnessSlider, MaxDistance = MaxDistanceSlider, Prediction = PredictionSlider,
         Priority = PriorityDropdown, ESPBoxStyle = ESPBoxStyleDropdown,
         ESPDistance = ESPDistanceSlider, ESPColor = ESPColorPicker, ESPChamsColor = ESPChamsColorPicker,
-        BackgroundColor = BGColorPicker, MainColor = MainColorPicker,
-        AccentColor = AccentColorPicker, OutlineColor = OutlineColorPicker, FontColor = FontColorPicker,
     }
 
     local ConfigGroup = Tabs["UI Settings"]:AddRightGroupbox("Configuration")
@@ -834,7 +800,7 @@ if VALID_KEYS[userEnteredKey] then
     end
 
     local function SaveConfig(Name)
-        if not Name or Name:gsub("%s", "") == "" then return Library:Notify("Invalid config name", 2) end
+        if not Name or Name:gsub("%s", "") == "" then return Library:Notify("Invalid config name (empty)", 2) end
         local Data = { objects = {} }
         for Idx, Toggle in next, SaveToggles do
             table.insert(Data.objects, { type = "Toggle", idx = Idx, value = Toggle.Value })
@@ -844,7 +810,7 @@ if VALID_KEYS[userEnteredKey] then
             if Type == "Slider" then
                 table.insert(Data.objects, { type = "Slider", idx = Idx, value = tostring(Option.Value) })
             elseif Type == "Dropdown" then
-                table.insert(Data.objects, { type = "Dropdown", idx = Idx, value = Option.Value })
+                table.insert(Data.objects, { type = "Dropdown", idx = Idx, value = Option.Value, multi = Option.Multi })
             elseif Type == "KeyPicker" then
                 table.insert(Data.objects, { type = "KeyPicker", idx = Idx, mode = Option.Mode, key = Option.Value })
             elseif Type == "ColorPicker" then
@@ -852,7 +818,7 @@ if VALID_KEYS[userEnteredKey] then
             end
         end
         local ok, encoded = pcall(HttpService.JSONEncode, HttpService, Data)
-        if not ok then return Library:Notify("Encode error", 3) end
+        if not ok then return Library:Notify("Failed to save config: encode error", 3) end
         writefile(CONFIG_FOLDER .. "/" .. Name .. ".json", encoded)
         Library:Notify(string.format('Created config "%s"', Name), 3)
         RefreshConfigList()
@@ -863,7 +829,7 @@ if VALID_KEYS[userEnteredKey] then
         local Path = CONFIG_FOLDER .. "/" .. Name .. ".json"
         if not isfile(Path) then return Library:Notify("Config not found", 2) end
         local ok, decoded = pcall(HttpService.JSONDecode, HttpService, readfile(Path))
-        if not ok then return Library:Notify("Decode error", 3) end
+        if not ok then return Library:Notify("Failed to load config: decode error", 3) end
         for _, Object in next, decoded.objects do
             pcall(function()
                 local Toggle = SaveToggles[Object.idx]
@@ -879,7 +845,6 @@ if VALID_KEYS[userEnteredKey] then
                 end
             end)
         end
-        ApplyTheme()
         Library:Notify(string.format('Loaded config "%s"', Name), 3)
     end
 
